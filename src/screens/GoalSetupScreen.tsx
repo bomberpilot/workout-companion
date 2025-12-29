@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { View, Text, Pressable, Alert } from "react-native";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { useAuth } from "../auth/useAuth";
@@ -44,11 +44,35 @@ export default function GoalSetupScreen() {
       return Alert.alert("Goal", "Set a target workouts number (at least 1).");
     }
 
+    const iso = goalDateISO.trim();
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+    if (!m) return Alert.alert("Goal date", "Use format YYYY-MM-DD.");
+
+    // Basic range sanity (doesn't check month lengths precisely, but blocks obvious typos)
+    const y = Number(m[1]);
+    const mo = Number(m[2]);
+    const da = Number(m[3]);
+    if (mo < 1 || mo > 12) return Alert.alert("Goal date", "Month must be 01–12.");
+    if (da < 1 || da > 31) return Alert.alert("Goal date", "Day must be 01–31.");
+    if (y < 2000 || y > 2100) return Alert.alert("Goal date", "Year looks off. Use 2000–2100.");
+
+    // Pull your own displayName so progress doesn't need cross-user reads
+    let displayName = "";
+    try {
+      const snap = await getDoc(doc(db, "users", user.uid));
+      displayName = String((snap.data() as any)?.displayName ?? "").trim();
+    } catch {
+      // non-fatal
+    }
+    if (!displayName) displayName = user.uid.slice(0, 6);
+
     await setDoc(
       doc(db, "groups", params.groupId, "goals", user.uid),
       {
+        displayName,
         targetWorkouts: targetNum,
-        goalDateISO,
+        goalDateISO: iso,
+        completedWorkouts: 0,
         updatedAt: serverTimestamp(),
         createdAt: serverTimestamp(),
       },
@@ -67,6 +91,7 @@ export default function GoalSetupScreen() {
         </Text>
 
         <Text style={{ marginTop: 14, fontWeight: "800" }}>Goal date</Text>
+
         <Pressable
           onPress={() => setShowCalendar(true)}
           style={{
@@ -82,6 +107,13 @@ export default function GoalSetupScreen() {
           <Text style={{ fontSize: 16, fontWeight: "900" }}>{goalDateISO}</Text>
           <Text style={{ marginTop: 4, opacity: 0.65 }}>Tap to open calendar</Text>
         </Pressable>
+
+        <TextField
+          label="Goal date (YYYY-MM-DD)"
+          value={goalDateISO}
+          onChangeText={setGoalDateISO}
+          placeholder="2026-01-15"
+        />
 
         <TextField
           label="Workouts by that date"

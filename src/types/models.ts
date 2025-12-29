@@ -1,6 +1,6 @@
 export type WorkoutType = "cardio" | "strength" | "flexibility" | "sport" | "other";
 
-export type Message =
+export type ChatMessage =
   | {
       type: "text";
       userId: string;
@@ -8,25 +8,24 @@ export type Message =
       createdAt: any;
     }
   | {
-      type: "workout_log";
+      type: "workout";
       userId: string;
-      workoutId: string;
       workoutType: WorkoutType;
-      notesPreview?: string | null;
+      text?: string; // notes
       createdAt: any;
     };
 
-export type Goal = {
-  goalDate?: any;
+export type GroupGoal = {
+  displayName?: string;
   targetWorkouts?: number;
+  goalDateISO?: string; // "YYYY-MM-DD"
+  completedWorkouts?: number; // per-group counter incremented on global logs
   createdAt?: any;
   updatedAt?: any;
 };
 
 export type UserWorkout = {
-  userId: string;
   type: WorkoutType;
   notes?: string | null;
-  performedAt?: any;
   createdAt?: any;
 };

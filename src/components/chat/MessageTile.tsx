@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { View, Text, Pressable, Dimensions } from "react-native";
-import { Message } from "../../types/models";
+import { ChatMessage } from "../../types/models";
 
 export default function MessageTile({
   message,
@@ -8,7 +8,7 @@ export default function MessageTile({
   displayName,
   onPressUser,
 }: {
-  message: Message;
+  message: ChatMessage;
   isMine: boolean;
   displayName: string;
   onPressUser?: (userId: string) => void;

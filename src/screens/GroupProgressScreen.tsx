@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { View, Text, FlatList, Alert } from "react-native";
 import { RouteProp, useRoute } from "@react-navigation/native";
-import { collection, doc, getDoc, getDocs, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot } from "firebase/firestore";
 
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { db } from "../config/firebase";
@@ -25,39 +25,25 @@ export default function GroupProgressScreen() {
   const [rows, setRows] = useState<Row[]>([]);
 
   useEffect(() => {
-    // Subscribe to group goals, then hydrate each member's name + workout count.
     const goalsRef = collection(db, "groups", params.groupId, "goals");
     const unsub = onSnapshot(
       goalsRef,
-      async (snap) => {
-        try {
-          const next: Row[] = [];
-          for (const d of snap.docs) {
-            const userId = d.id;
-            const gd = d.data() as any;
-            const target = Number(gd?.targetWorkouts ?? 0) || 0;
+      (snap) => {
+        const next: Row[] = snap.docs.map((d) => {
+          const gd = d.data() as any;
+          const target = Number(gd?.targetWorkouts ?? 0) || 0;
+          const completed = Number(gd?.completedWorkouts ?? 0) || 0;
+          const displayName = String(gd?.displayName ?? "").trim() || d.id.slice(0, 6);
+          return { userId: d.id, displayName, target, completed };
+        });
 
-            const profile = await getDoc(doc(db, "users", userId));
-            const displayName = ((profile.data() as any)?.displayName as string) || userId.slice(0, 6);
+        next.sort((a, b) => {
+          const ra = a.target ? a.completed / a.target : 0;
+          const rb = b.target ? b.completed / b.target : 0;
+          return rb - ra || b.completed - a.completed;
+        });
 
-            // Count global workouts (simple MVP)
-            const wSnap = await getDocs(collection(db, "users", userId, "workouts"));
-            const completed = wSnap.size;
-
-            next.push({ userId, displayName, target, completed });
-          }
-
-          // Sort by completion ratio then completed count
-          next.sort((a, b) => {
-            const ra = a.target ? a.completed / a.target : 0;
-            const rb = b.target ? b.completed / b.target : 0;
-            return rb - ra || b.completed - a.completed;
-          });
-
-          setRows(next);
-        } catch (e: any) {
-          Alert.alert("Progress error", e?.message ?? "Unknown error");
-        }
+        setRows(next);
       },
       (err) => Alert.alert("Progress error", err.message)
     );
