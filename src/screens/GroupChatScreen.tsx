@@ -27,7 +27,7 @@ import {
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { useAuth } from "../auth/useAuth";
 import { db } from "../config/firebase";
-import { groupDoc, messagesCol } from "../firestore/paths";
+import { groupDoc, groupMembersCol, messagesCol } from "../firestore/paths";
 import MessageTile from "../components/chat/MessageTile";
 import ComposerBar from "../components/chat/ComposerBar";
 
@@ -49,6 +49,7 @@ export default function GroupChatScreen() {
   const [group, setGroup] = useState<GroupMeta>({});
   const [messages, setMessages] = useState<any[]>([]);
   const [nameMap, setNameMap] = useState<Record<string, string>>({});
+  const [groupNameMap, setGroupNameMap] = useState<Record<string, string>>({});
   const inflight = useRef<Set<string>>(new Set());
 
   // Header buttons
@@ -116,10 +117,31 @@ export default function GroupChatScreen() {
     };
   }, [params.groupId, user]);
 
+  // Group member nicknames
+  useEffect(() => {
+    const unsub = onSnapshot(
+      groupMembersCol(params.groupId),
+      (snap) => {
+        const next: Record<string, string> = {};
+        snap.docs.forEach((docSnap) => {
+          const nick = (docSnap.data() as any)?.nickname;
+          if (typeof nick === "string" && nick.trim().length) {
+            next[docSnap.id] = nick.trim();
+          }
+        });
+        setGroupNameMap(next);
+      },
+      (err) => Alert.alert("Members error", err.message)
+    );
+    return unsub;
+  }, [params.groupId]);
+
   // Resolve user display names lazily
   useEffect(() => {
     const ids = Array.from(new Set(messages.map((m) => m.userId).filter(Boolean)));
-    const missing = ids.filter((uid) => !nameMap[uid] && !inflight.current.has(uid));
+    const missing = ids.filter(
+      (uid) => !nameMap[uid] && !groupNameMap[uid] && !inflight.current.has(uid)
+    );
     if (!missing.length) return;
 
     (async () => {
@@ -177,7 +199,9 @@ export default function GroupChatScreen() {
             renderItem={({ item }) => {
               const uid = item.userId as string | undefined;
               const isMine = !!user && !!uid && uid === user.uid;
-              const displayName = uid ? (nameMap[uid] ?? fallbackName(uid)) : "System";
+              const displayName = uid
+                ? groupNameMap[uid] ?? nameMap[uid] ?? fallbackName(uid)
+                : "System";
 
               return (
                 <MessageTile

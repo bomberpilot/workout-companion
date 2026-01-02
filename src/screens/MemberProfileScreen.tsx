@@ -1,24 +1,29 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, FlatList } from "react-native";
+import { View, Text, FlatList, Alert } from "react-native";
 import { RouteProp, useRoute } from "@react-navigation/native";
-import { collection, doc, getDocs, onSnapshot } from "firebase/firestore";
+import { doc, getDocs, limit, onSnapshot, orderBy, query } from "firebase/firestore";
 
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { db } from "../config/firebase";
 import Tile from "../components/ui/Tile";
-import { goalDoc } from "../firestore/paths";
+import { groupMemberDoc, userWorkoutsCol } from "../firestore/paths";
 
 type R = RouteProp<RootStackParamList, "MemberProfile">;
 
 type WorkoutRow = {
-  type: string;
+  activityTypes?: string[];
+  durationMinutes?: number;
+  date?: any;
+  createdAt?: any;
+  type?: string;
+  workoutType?: string;
   notes?: string | null;
-  performedAt?: any;
 };
 
 export default function MemberProfileScreen() {
   const { params } = useRoute<R>();
   const [displayName, setDisplayName] = useState(params.userId.slice(0, 6));
+  const [groupNickname, setGroupNickname] = useState<string | null>(null);
   const [target, setTarget] = useState<number | null>(null);
   const [workouts, setWorkouts] = useState<WorkoutRow[]>([]);
 
@@ -28,30 +33,50 @@ export default function MemberProfileScreen() {
       if (typeof dn === "string" && dn.trim().length) setDisplayName(dn.trim());
     });
 
-    const unsubGoal = onSnapshot(goalDoc(params.groupId, params.userId), (snap) => {
+    const unsubGoal = onSnapshot(doc(db, "groups", params.groupId, "goals", params.userId), (snap) => {
       const g = snap.data() as any;
-      setTarget(typeof g?.targetWorkouts === "number" ? g.targetWorkouts : null);
+      if (typeof g?.targetWorkouts === "number") {
+        setTarget(g.targetWorkouts);
+      } else if (typeof g?.targetValue === "number") {
+        setTarget(g.targetValue);
+      } else {
+        setTarget(null);
+      }
+    });
+
+    const unsubMember = onSnapshot(groupMemberDoc(params.groupId, params.userId), (snap) => {
+      const nick = (snap.data() as any)?.nickname;
+      if (typeof nick === "string" && nick.trim().length) {
+        setGroupNickname(nick.trim());
+      } else {
+        setGroupNickname(null);
+      }
     });
 
     return () => {
       unsubProfile();
       unsubGoal();
+      unsubMember();
     };
   }, [params.groupId, params.userId]);
 
   useEffect(() => {
     (async () => {
-      const wSnap = await getDocs(collection(db, "users", params.userId, "workouts"));
-      const rows = wSnap.docs.map((d) => d.data() as any);
+      try {
+        const wQuery = query(userWorkoutsCol(params.userId), orderBy("createdAt", "desc"), limit(40));
+        const wSnap = await getDocs(wQuery);
+        const rows = wSnap.docs.map((d) => d.data() as WorkoutRow);
 
-      // Sort locally by performedAt if present
-      rows.sort((a: any, b: any) => {
-        const ta = a.performedAt?.toMillis ? a.performedAt.toMillis() : 0;
-        const tb = b.performedAt?.toMillis ? b.performedAt.toMillis() : 0;
-        return tb - ta;
-      });
+        rows.sort((a, b) => {
+          const ta = getWorkoutTime(a);
+          const tb = getWorkoutTime(b);
+          return tb - ta;
+        });
 
-      setWorkouts(rows.slice(0, 40));
+        setWorkouts(rows);
+      } catch (err: any) {
+        Alert.alert("Workouts error", err?.message ?? "Unable to load workouts.");
+      }
     })();
   }, [params.userId]);
 
@@ -61,7 +86,7 @@ export default function MemberProfileScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: "#f6f6f6", paddingTop: 12 }}>
       <Tile>
-        <Text style={{ fontSize: 18, fontWeight: "900" }}>{displayName}</Text>
+        <Text style={{ fontSize: 18, fontWeight: "900" }}>{groupNickname ?? displayName}</Text>
         <Text style={{ marginTop: 8, fontWeight: "800" }}>
           Progress: {completed} / {target ?? "—"}
         </Text>
@@ -86,7 +111,10 @@ export default function MemberProfileScreen() {
         keyExtractor={(_, idx) => String(idx)}
         renderItem={({ item }) => (
           <Tile>
-            <Text style={{ fontWeight: "900" }}>{cap(String(item.type ?? "workout"))}</Text>
+            <Text style={{ fontWeight: "900" }}>{formatWorkoutTitle(item)}</Text>
+            {formatWorkoutMeta(item) ? (
+              <Text style={{ marginTop: 6, opacity: 0.7 }}>{formatWorkoutMeta(item)}</Text>
+            ) : null}
             {item.notes ? <Text style={{ marginTop: 6, opacity: 0.85 }}>{String(item.notes)}</Text> : null}
           </Tile>
         )}
@@ -97,4 +125,29 @@ export default function MemberProfileScreen() {
 
 function cap(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function formatWorkoutTitle(item: WorkoutRow) {
+  if (item.activityTypes?.length) return item.activityTypes.map((t) => cap(String(t))).join(", ");
+  if (item.workoutType) return cap(String(item.workoutType));
+  if (item.type) return cap(String(item.type));
+  return "Workout";
+}
+
+function formatWorkoutMeta(item: WorkoutRow) {
+  const parts: string[] = [];
+  if (typeof item.durationMinutes === "number" && item.durationMinutes > 0) {
+    parts.push(`${Math.round(item.durationMinutes)} min`);
+  }
+  const when = item.date ?? item.createdAt;
+  if (when?.toDate) {
+    parts.push(when.toDate().toLocaleDateString());
+  }
+  return parts.join(" • ");
+}
+
+function getWorkoutTime(item: WorkoutRow) {
+  const when = item.date ?? item.createdAt;
+  if (when?.toMillis) return when.toMillis();
+  return 0;
 }
