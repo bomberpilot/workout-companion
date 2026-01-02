@@ -23,6 +23,9 @@ export default function MessageTile({
 
   const uid = (message as any)?.userId as string | undefined;
   const text = (message as any)?.text as string | undefined;
+  const groupNote = (message as any)?.groupNote as string | undefined;
+  const activityTypes = (message as any)?.activityTypes as string[] | undefined;
+  const durationMinutes = (message as any)?.durationMinutes as number | undefined;
   const type = (message as any)?.type as string | undefined;
 
   return (
@@ -59,12 +62,22 @@ export default function MessageTile({
 
         {type === "workout" ? (
           <Text style={{ marginTop: 10, fontSize: 16, fontWeight: "900" }}>
-            {(message as any)?.workoutType ? cap(String((message as any).workoutType)) : "Workout"}
+            {activityTypes?.length
+              ? activityTypes.map((t) => cap(String(t))).join(", ")
+              : (message as any)?.workoutType
+                ? cap(String((message as any).workoutType))
+                : "Workout"}
           </Text>
         ) : null}
 
-        {text ? (
-          <Text style={{ marginTop: 10, fontSize: 15, lineHeight: 20, opacity: 0.9 }}>{text}</Text>
+        {type === "workout" && typeof durationMinutes === "number" && durationMinutes > 0 ? (
+          <Text style={{ marginTop: 6, opacity: 0.7 }}>{Math.round(durationMinutes)} min</Text>
+        ) : null}
+
+        {text || groupNote ? (
+          <Text style={{ marginTop: 10, fontSize: 15, lineHeight: 20, opacity: 0.9 }}>
+            {groupNote || text}
+          </Text>
         ) : null}
 
         {/* subtle alignment cue */}

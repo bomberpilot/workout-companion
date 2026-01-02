@@ -30,6 +30,7 @@ import { db } from "../config/firebase";
 import { groupDoc, groupMembersCol, messagesCol } from "../firestore/paths";
 import MessageTile from "../components/chat/MessageTile";
 import ComposerBar from "../components/chat/ComposerBar";
+import LogWorkoutModal from "../components/workout/LogWorkoutModal";
 
 type R = RouteProp<RootStackParamList, "Chat">;
 type Nav = NativeStackNavigationProp<RootStackParamList, "Chat">;
@@ -50,6 +51,7 @@ export default function GroupChatScreen() {
   const [messages, setMessages] = useState<any[]>([]);
   const [nameMap, setNameMap] = useState<Record<string, string>>({});
   const [groupNameMap, setGroupNameMap] = useState<Record<string, string>>({});
+  const [showLog, setShowLog] = useState(false);
   const inflight = useRef<Set<string>>(new Set());
 
   // Header buttons
@@ -65,9 +67,14 @@ export default function GroupChatScreen() {
         </Pressable>
       ),
       headerRight: () => (
-        <Pressable onPress={() => nav.navigate("Home")} style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
-          <Text style={{ fontWeight: "900" }}>Home</Text>
-        </Pressable>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <Pressable onPress={() => setShowLog(true)} style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
+            <Text style={{ fontWeight: "900" }}>Log</Text>
+          </Pressable>
+          <Pressable onPress={() => nav.navigate("Home")} style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
+            <Text style={{ fontWeight: "900" }}>Home</Text>
+          </Pressable>
+        </View>
       ),
     });
   }, [nav, params.groupId, group?.name]);
@@ -217,6 +224,10 @@ export default function GroupChatScreen() {
           <ComposerBar onSendText={sendText} />
         </View>
       </TouchableWithoutFeedback>
+
+      {user ? (
+        <LogWorkoutModal visible={showLog} onClose={() => setShowLog(false)} userId={user.uid} />
+      ) : null}
     </KeyboardAvoidingView>
   );
 }

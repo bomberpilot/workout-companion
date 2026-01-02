@@ -2,12 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, FlatList, Dimensions, Pressable, Alert, NativeSyntheticEvent, NativeScrollEvent } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { addDoc, collection, doc, getDocs, increment, onSnapshot, query, serverTimestamp, setDoc } from "firebase/firestore";
+import { collection, doc, getDocs, onSnapshot, query, serverTimestamp, setDoc } from "firebase/firestore";
 
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { useAuth } from "../auth/useAuth";
-import { userGroupsCol, groupDoc, messagesCol } from "../firestore/paths";
-import GlobalWorkoutLogModal from "../components/workout/GlobalWorkoutLogModal";
+import { userGroupsCol, groupDoc } from "../firestore/paths";
+import LogWorkoutModal from "../components/workout/LogWorkoutModal";
 import GoalTile from "../components/home/GoalTile";
 import { db } from "../config/firebase";
 
@@ -20,8 +20,6 @@ type GoalCard = {
   targetWorkouts?: number;
   goalDateISO?: string;
 };
-
-type WorkoutType = "cardio" | "strength" | "flexibility" | "sport" | "other";
 
 export default function HomeScreen() {
   const nav = useNavigation<Nav>();
@@ -130,62 +128,9 @@ export default function HomeScreen() {
     if (idx !== activeIndex) setActiveIndex(idx);
   }
 
-  async function logWorkoutGlobally({
-    userId,
-    workoutType,
-    notes,
-  }: {
-    userId: string;
-    workoutType: WorkoutType;
-    notes?: string;
-  }) {
-    await addDoc(collection(db, "users", userId, "workouts"), {
-      type: workoutType,
-      notes: notes ?? "",
-      createdAt: serverTimestamp(),
-    });
-
-    const groupsSnap = await getDocs(userGroupsCol(userId));
-    const groupIds = groupsSnap.docs.map((d) => d.id);
-
-    for (const groupId of groupIds) {
-      try {
-        await setDoc(
-          doc(db, "groups", groupId, "members", userId),
-          { userId, joinDate: serverTimestamp() },
-          { merge: true }
-        );
-      } catch {
-        // non-fatal
-      }
-
-      await addDoc(messagesCol(groupId), {
-        type: "workout",
-        userId,
-        workoutType,
-        text: notes ?? "",
-        createdAt: serverTimestamp(),
-      });
-
-      await setDoc(
-        doc(db, "groups", groupId, "goals", userId),
-        {
-          completedWorkouts: increment(1),
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
-    }
-  }
-
-  async function submitGlobalWorkout(payload: { type: string; notes?: string }) {
+  async function refreshWorkoutCount() {
     if (!user) return;
     try {
-      await logWorkoutGlobally({
-        userId: user.uid,
-        workoutType: payload.type as WorkoutType,
-        notes: payload.notes,
-      });
       const snap = await getDocs(collection(db, "users", user.uid, "workouts"));
       setGlobalCompleted(snap.size);
     } catch (e: any) {
@@ -312,7 +257,14 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <GlobalWorkoutLogModal visible={showLog} onClose={() => setShowLog(false)} onSubmit={submitGlobalWorkout} />
+      {user ? (
+        <LogWorkoutModal
+          visible={showLog}
+          onClose={() => setShowLog(false)}
+          userId={user.uid}
+          onLogged={refreshWorkoutCount}
+        />
+      ) : null}
     </View>
   );
 }

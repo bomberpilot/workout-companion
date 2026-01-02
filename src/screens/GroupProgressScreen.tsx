@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { View, Text, FlatList, Alert } from "react-native";
-import { RouteProp, useRoute } from "@react-navigation/native";
-import { collection, doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
+import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { useAuth } from "../auth/useAuth";
@@ -9,9 +10,10 @@ import { db } from "../config/firebase";
 import Tile from "../components/ui/Tile";
 import TextField from "../components/ui/TextField";
 import Button from "../components/ui/Button";
-import { groupMembersCol } from "../firestore/paths";
+import { groupMemberDoc, groupMembersCol, userGroupDoc } from "../firestore/paths";
 
 type R = RouteProp<RootStackParamList, "GroupProgress">;
+type Nav = NativeStackNavigationProp<RootStackParamList, "GroupProgress">;
 
 type Row = {
   userId: string;
@@ -33,6 +35,7 @@ function clamp01(x: number) {
 
 export default function GroupProgressScreen() {
   const { params } = useRoute<R>();
+  const nav = useNavigation<Nav>();
   const { user } = useAuth();
   const [rows, setRows] = useState<Row[]>([]);
   const [goalRows, setGoalRows] = useState<GoalRow[]>([]);
@@ -153,6 +156,24 @@ export default function GroupProgressScreen() {
     }
   }
 
+  function confirmLeaveGroup() {
+    Alert.alert("Leave group?", "You will stop seeing this group and its messages.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Leave", style: "destructive", onPress: leaveGroup },
+    ]);
+  }
+
+  async function leaveGroup() {
+    if (!user) return;
+    nav.navigate("Home");
+    try {
+      await deleteDoc(groupMemberDoc(params.groupId, user.uid));
+      await deleteDoc(userGroupDoc(user.uid, params.groupId));
+    } catch (err: any) {
+      Alert.alert("Leave group error", err?.message ?? "Unable to leave this group.");
+    }
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: "#f6f6f6", paddingTop: 12 }}>
       <Tile>
@@ -170,6 +191,14 @@ export default function GroupProgressScreen() {
           placeholder="e.g., Chief"
         />
         <Button title={savingNickname ? "Saving…" : "Save nickname"} onPress={saveNickname} disabled={savingNickname} />
+      </Tile>
+
+      <Tile>
+        <Text style={{ fontSize: 16, fontWeight: "900" }}>Membership</Text>
+        <Text style={{ marginTop: 6, opacity: 0.7 }}>
+          Leaving removes this group from your list and stops future messages.
+        </Text>
+        <Button title="Leave group" onPress={confirmLeaveGroup} />
       </Tile>
 
       <FlatList

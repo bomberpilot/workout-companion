@@ -6,6 +6,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  increment,
   query,
   serverTimestamp,
   setDoc,
@@ -214,8 +215,17 @@ export async function logWorkoutToAllGroups(params: {
       workoutDate: w.date,
       activityTypes: w.activityTypes,
       durationMinutes: w.durationMinutes,
-      groupNote: "",
+      groupNote: params.notes ?? "",
     });
+
+    await setDoc(
+      doc(db, "groups", groupId, "goals", params.userId),
+      {
+        completedWorkouts: increment(1),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
   }
 
   return { groupsCount: groupIds.length, workoutId: w.workoutId };
@@ -245,8 +255,17 @@ export async function logWorkoutFromGroupChat(params: {
     workoutDate: w.date,
     activityTypes: w.activityTypes,
     durationMinutes: w.durationMinutes,
-    groupNote: params.groupNote ?? "",
+    groupNote: params.groupNote ?? params.notes ?? "",
   });
+
+  await setDoc(
+    doc(db, "groups", params.groupId, "goals", params.userId),
+    {
+      completedWorkouts: increment(1),
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
 
   return { workoutId: w.workoutId };
 }

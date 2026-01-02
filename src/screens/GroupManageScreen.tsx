@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, Alert, Pressable } from "react-native";
-import { addDoc, collection, doc, getDocs, query, serverTimestamp, setDoc, where } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where } from "firebase/firestore";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
@@ -35,12 +35,29 @@ export default function GroupManageScreen() {
   const [inviteCode, setInviteCode] = useState("");
   const [groupName, setGroupName] = useState("");
   const [groupType, setGroupType] = useState<GroupType>("friends");
+  const [nickname, setNickname] = useState("");
+  const [defaultNickname, setDefaultNickname] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, "users", user.uid));
+        const dn = String((snap.data() as any)?.displayName ?? "").trim();
+        if (dn) setDefaultNickname(dn);
+      } catch {
+        // non-fatal
+      }
+    })();
+  }, [user]);
 
   async function joinGroup() {
     if (!user) return;
     const code = inviteCode.trim().toUpperCase();
     if (!code) return Alert.alert("Join group", "Enter an invite code.");
+
+    const nick = nickname.trim() || defaultNickname || user.uid.slice(0, 6);
 
     setBusy(true);
     try {
@@ -55,14 +72,20 @@ export default function GroupManageScreen() {
         {
           userId: user.uid,
           role: "member",
+          nickname: nick,
           joinDate: serverTimestamp(),
         },
         { merge: true }
       );
 
-      await setDoc(doc(db, "users", user.uid, "groups", groupId), { joinedAt: serverTimestamp() }, { merge: true });
+      await setDoc(
+        doc(db, "users", user.uid, "groups", groupId),
+        { joinedAt: serverTimestamp(), nickname: nick },
+        { merge: true }
+      );
 
-      nav.navigate("Chat", { groupId });
+      // ✅ After joining, prompt goal setup for this group
+      nav.navigate("GoalSetup", { groupId });
     } catch (e: any) {
       Alert.alert("Join error", e?.message ?? "Something went wrong.");
     } finally {
@@ -74,6 +97,7 @@ export default function GroupManageScreen() {
     if (!user) return;
     const name = groupName.trim();
     if (!name) return Alert.alert("Create group", "Enter a group name.");
+    const nick = nickname.trim() || defaultNickname || user.uid.slice(0, 6);
 
     setBusy(true);
     try {
@@ -92,6 +116,7 @@ export default function GroupManageScreen() {
         {
           userId: user.uid,
           role: "owner",
+          nickname: nick,
           joinDate: serverTimestamp(),
         },
         { merge: true }
@@ -99,7 +124,7 @@ export default function GroupManageScreen() {
 
       await setDoc(
         doc(db, "users", user.uid, "groups", g.id),
-        { joinedAt: serverTimestamp(), role: "owner" },
+        { joinedAt: serverTimestamp(), role: "owner", nickname: nick },
         { merge: true }
       );
 
@@ -118,6 +143,12 @@ export default function GroupManageScreen() {
         <Text style={{ marginTop: 6, opacity: 0.7 }}>Join with a code, or create a new group.</Text>
 
         <TextField label="Invite code (join)" value={inviteCode} onChangeText={setInviteCode} placeholder="e.g., BQKW12" />
+        <TextField
+          label="Your nickname in this group"
+          value={nickname}
+          onChangeText={setNickname}
+          placeholder={defaultNickname || "e.g., Chief"}
+        />
         <Button title={busy ? "Working…" : "Join group"} onPress={joinGroup} disabled={busy} />
 
         <View style={{ height: 16 }} />
