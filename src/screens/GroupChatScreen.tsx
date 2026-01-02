@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -27,7 +27,7 @@ import {
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { useAuth } from "../auth/useAuth";
 import { db } from "../config/firebase";
-import { groupDoc, groupMembersCol, messagesCol } from "../firestore/paths";
+import { groupDoc, groupMembersCol, messagesCol, userWorkoutDoc } from "../firestore/paths";
 import MessageTile from "../components/chat/MessageTile";
 import ComposerBar from "../components/chat/ComposerBar";
 import LogWorkoutModal from "../components/workout/LogWorkoutModal";
@@ -36,6 +36,11 @@ type R = RouteProp<RootStackParamList, "Chat">;
 type Nav = NativeStackNavigationProp<RootStackParamList, "Chat">;
 
 type GroupMeta = { name?: string; inviteCode?: string };
+type WorkoutDetails = {
+  activityTypes?: string[];
+  durationMinutes?: number;
+  notes?: string;
+};
 
 function fallbackName(uid: string) {
   return uid.slice(0, 6);
@@ -53,6 +58,10 @@ export default function GroupChatScreen() {
   const [groupNameMap, setGroupNameMap] = useState<Record<string, string>>({});
   const [showLog, setShowLog] = useState(false);
   const inflight = useRef<Set<string>>(new Set());
+  const [workoutDetails, setWorkoutDetails] = useState<Record<string, WorkoutDetails>>({});
+
+  const workoutKey = (userId?: string, workoutId?: string) =>
+    userId && workoutId ? `${userId}:${workoutId}` : "";
 
   // Header buttons
   useEffect(() => {
@@ -170,6 +179,71 @@ export default function GroupChatScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages]);
 
+  useEffect(() => {
+    const missing = messages.filter((message) => {
+      const m = message as any;
+      if (m?.type !== "workout") return false;
+      if (!m?.userId || !m?.workoutId) return false;
+      const key = workoutKey(m.userId, m.workoutId);
+      if (!key || workoutDetails[key]) return false;
+      if (Array.isArray(m.activityTypes) && m.activityTypes.length) return false;
+      return true;
+    });
+
+    if (!missing.length) return;
+
+    let active = true;
+
+    (async () => {
+      const updates: Record<string, WorkoutDetails> = {};
+      for (const message of missing) {
+        const m = message as any;
+        const key = workoutKey(m.userId, m.workoutId);
+        if (!key || updates[key]) continue;
+        try {
+          const snap = await getDoc(userWorkoutDoc(m.userId, m.workoutId));
+          if (!snap.exists()) continue;
+          const data = snap.data() as WorkoutDetails;
+          updates[key] = {
+            activityTypes: Array.isArray(data.activityTypes) ? data.activityTypes : undefined,
+            durationMinutes:
+              typeof data.durationMinutes === "number" ? data.durationMinutes : undefined,
+            notes: typeof data.notes === "string" ? data.notes : undefined,
+          };
+        } catch {
+          // ignore single-message failures
+        }
+      }
+      if (!active || !Object.keys(updates).length) return;
+      setWorkoutDetails((prev) => ({ ...prev, ...updates }));
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [messages, workoutDetails]);
+
+  const messagesWithDetails = useMemo(() => {
+    return messages.map((message) => {
+      const m = message as any;
+      if (m?.type !== "workout") return message;
+      const key = workoutKey(m.userId, m.workoutId);
+      const details = key ? workoutDetails[key] : undefined;
+      if (!details) return message;
+      return {
+        ...m,
+        activityTypes: Array.isArray(m.activityTypes) && m.activityTypes.length
+          ? m.activityTypes
+          : details.activityTypes,
+        durationMinutes:
+          typeof m.durationMinutes === "number" && m.durationMinutes > 0
+            ? m.durationMinutes
+            : details.durationMinutes,
+        workoutNotes: details.notes,
+      };
+    });
+  }, [messages, workoutDetails]);
+
   async function sendText(text: string) {
     if (!user) return;
     const t = text.trim();
@@ -198,7 +272,7 @@ export default function GroupChatScreen() {
           </View>
 
           <FlatList
-            data={messages}
+            data={messagesWithDetails}
             inverted
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ paddingBottom: 190 }}

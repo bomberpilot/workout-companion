@@ -24,9 +24,21 @@ export default function MessageTile({
   const uid = (message as any)?.userId as string | undefined;
   const text = (message as any)?.text as string | undefined;
   const groupNote = (message as any)?.groupNote as string | undefined;
-  const activityTypes = (message as any)?.activityTypes as string[] | undefined;
+ const workoutNotes = (message as any)?.workoutNotes as string | undefined;
+  const legacyNotes = (message as any)?.notes as string | undefined;
+  const activityTypesRaw =
+    (message as any)?.activityTypes ??
+    (message as any)?.activityType ??
+    (message as any)?.workoutTypes ??
+    (message as any)?.workoutType;
+  const activityTypes = Array.isArray(activityTypesRaw)
+    ? activityTypesRaw
+    : typeof activityTypesRaw === "string"
+      ? [activityTypesRaw]
+      : undefined;
   const durationMinutes = (message as any)?.durationMinutes as number | undefined;
   const type = (message as any)?.type as string | undefined;
+  const notesText = groupNote || workoutNotes || legacyNotes || text;
 
   return (
     <View
@@ -64,9 +76,7 @@ export default function MessageTile({
           <Text style={{ marginTop: 10, fontSize: 16, fontWeight: "900" }}>
             {activityTypes?.length
               ? activityTypes.map((t) => cap(String(t))).join(", ")
-              : (message as any)?.workoutType
-                ? cap(String((message as any).workoutType))
-                : "Workout"}
+              : "Workout"}
           </Text>
         ) : null}
 
@@ -74,9 +84,9 @@ export default function MessageTile({
           <Text style={{ marginTop: 6, opacity: 0.7 }}>{Math.round(durationMinutes)} min</Text>
         ) : null}
 
-        {text || groupNote ? (
+        {type === "workout" && notesText ? (
           <Text style={{ marginTop: 10, fontSize: 15, lineHeight: 20, opacity: 0.9 }}>
-            {groupNote || text}
+            {notesText}
           </Text>
         ) : null}
 

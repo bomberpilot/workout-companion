@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Button from "../ui/Button";
 import TextField from "../ui/TextField";
@@ -61,6 +62,8 @@ export default function LogWorkoutModal({
   onLogged,
 }: Props) {
   const isContextual = !!groupId;
+  const insets = useSafeAreaInsets();
+  const scrollRef = useRef<ScrollView | null>(null);
 
   const [activityTypes, setActivityTypes] = useState<string[]>([]);
   const [hours, setHours] = useState<string>("0");
@@ -84,6 +87,12 @@ export default function LogWorkoutModal({
     const m = Math.max(0, Math.floor(Number(minutes || 0)));
     return h * 60 + m;
   }, [hours, minutes]);
+
+  function scrollToNotes() {
+    setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, 50);
+  }
 
   function toggleActivity(label: string) {
     setActivityTypes((prev) => {
@@ -189,6 +198,8 @@ export default function LogWorkoutModal({
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
+          style={{ flex: 1, justifyContent: "flex-end" }}
         >
           <View
             style={{
@@ -197,7 +208,7 @@ export default function LogWorkoutModal({
               borderTopRightRadius: 26,
               paddingHorizontal: 16,
               paddingTop: 14,
-              paddingBottom: 18,
+              paddingBottom: Math.max(18, insets.bottom + 12),
               maxHeight: "92%",
             }}
           >
@@ -226,8 +237,9 @@ export default function LogWorkoutModal({
             </View>
 
             <ScrollView
+              ref={scrollRef}
               keyboardShouldPersistTaps="handled"
-              contentContainerStyle={{ paddingBottom: 10 }}
+              contentContainerStyle={{ paddingBottom: Math.max(40, insets.bottom + 40) }}
               showsVerticalScrollIndicator={false}
             >
               {/* Activity multi-select */}
@@ -355,6 +367,7 @@ export default function LogWorkoutModal({
                 onChangeText={setNotes}
                 placeholder="Optional notes for your workout..."
                 multiline
+                onFocus={scrollToNotes}
               />
 
               {/* Group-only caption (contextual) */}
@@ -369,6 +382,7 @@ export default function LogWorkoutModal({
                     onChangeText={setGroupNote}
                     placeholder="Optional caption just for this group..."
                     multiline
+                    onFocus={scrollToNotes}
                   />
                 </>
               ) : null}
