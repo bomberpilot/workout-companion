@@ -21,6 +21,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
 } from "firebase/firestore";
 
 import { RootStackParamList } from "../navigation/RootNavigator";
@@ -85,14 +86,35 @@ export default function GroupChatScreen() {
 
   // Messages
   useEffect(() => {
-    const q = query(messagesCol(params.groupId), orderBy("createdAt", "desc"));
-    const unsub = onSnapshot(
-      q,
-      (snap) => setMessages(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))),
-      (err) => Alert.alert("Chat error", err.message)
-    );
-    return unsub;
-  }, [params.groupId]);
+    if (!user) return;
+    let active = true;
+    let unsub = () => {};
+
+    (async () => {
+      try {
+        await setDoc(
+          doc(db, "groups", params.groupId, "members", user.uid),
+          { userId: user.uid, joinDate: serverTimestamp() },
+          { merge: true }
+        );
+      } catch {
+        // non-fatal
+      }
+
+      if (!active) return;
+      const q = query(messagesCol(params.groupId), orderBy("createdAt", "desc"));
+      unsub = onSnapshot(
+        q,
+        (snap) => setMessages(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))),
+        (err) => Alert.alert("Chat error", err.message)
+      );
+    })();
+
+    return () => {
+      active = false;
+      unsub();
+    };
+  }, [params.groupId, user]);
 
   // Resolve user display names lazily
   useEffect(() => {

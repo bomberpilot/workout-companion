@@ -1,23 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  View,
-  Text,
-  FlatList,
-  Dimensions,
-  Pressable,
-  Alert,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
-} from "react-native";
+import { View, Text, FlatList, Dimensions, Pressable, Alert, NativeSyntheticEvent, NativeScrollEvent } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { collection, getDocs, onSnapshot, query } from "firebase/firestore";
+import { addDoc, collection, doc, getDocs, increment, onSnapshot, query, serverTimestamp, setDoc } from "firebase/firestore";
 
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { useAuth } from "../auth/useAuth";
-import { userGroupsCol, userGroupDoc, groupDoc } from "../firestore/paths";
+import { userGroupsCol, groupDoc, messagesCol } from "../firestore/paths";
 import GlobalWorkoutLogModal from "../components/workout/GlobalWorkoutLogModal";
-import { logWorkoutToAllGroups } from "../firestore/actions";
 import GoalTile from "../components/home/GoalTile";
 import { db } from "../config/firebase";
 
@@ -31,6 +21,8 @@ type GoalCard = {
   goalDateISO?: string;
 };
 
+type WorkoutType = "cardio" | "strength" | "flexibility" | "sport" | "other";
+
 export default function HomeScreen() {
   const nav = useNavigation<Nav>();
   const { user } = useAuth();
@@ -40,13 +32,9 @@ export default function HomeScreen() {
   const [globalCompleted, setGlobalCompleted] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
 
-  const cardsByGroupRef = useRef<Record<string, GoalCard>>({});
-  const groupUnsubsRef = useRef<Record<string, Array<() => void>>>({});
-
   // Global workout count for current user (MVP: all-time)
   useEffect(() => {
     if (!user) return;
-
     (async () => {
       try {
         const snap = await getDocs(collection(db, "users", user.uid, "workouts"));
@@ -57,97 +45,58 @@ export default function HomeScreen() {
     })();
   }, [user]);
 
-  // Subscribe to user's groups, then each group's metadata + user's membership doc (goal fields live here)
+  // Subscribe to user's groups and hydrate minimal tile data
   useEffect(() => {
     if (!user) return;
 
-    const upsert = (groupId: string, patch: Partial<GoalCard>) => {
-      const prev = cardsByGroupRef.current[groupId] ?? {
-        groupId,
-        groupName: "Group",
-      };
-
-      cardsByGroupRef.current[groupId] = { ...prev, ...patch, groupId };
-      setCards(Object.values(cardsByGroupRef.current));
-    };
-
-    const cleanupAllGroupListeners = () => {
-      for (const gid of Object.keys(groupUnsubsRef.current)) {
-        for (const u of groupUnsubsRef.current[gid]) u();
-      }
-      groupUnsubsRef.current = {};
-    };
-
-    const unsubUserGroups = onSnapshot(
+    const unsub = onSnapshot(
       query(userGroupsCol(user.uid)),
       (snap) => {
-        const nextGroupIds = snap.docs.map((d) => d.id);
+        const groupIds = snap.docs.map((d) => d.id);
+        const unsubs: Array<() => void> = [];
+        const next: Record<string, GoalCard> = {};
 
-        // Remove groups that disappeared
-        for (const existingId of Object.keys(cardsByGroupRef.current)) {
-          if (!nextGroupIds.includes(existingId)) {
-            const unsubs = groupUnsubsRef.current[existingId] ?? [];
-            unsubs.forEach((f) => f());
-            delete groupUnsubsRef.current[existingId];
-            delete cardsByGroupRef.current[existingId];
-          }
+        for (const gid of groupIds) {
+          const u1 = onSnapshot(groupDoc(gid), (gs) => {
+            const g = gs.data() as any;
+            next[gid] = {
+              ...(next[gid] ?? { groupId: gid, groupName: "Group" }),
+              groupId: gid,
+              groupName: g?.name ?? "Group",
+              inviteCode: g?.inviteCode,
+            };
+            setCards(Object.values(next));
+          });
+
+          const u2 = onSnapshot(doc(db, "groups", gid, "goals", user.uid), (goalSnap) => {
+            const gd = goalSnap.data() as any;
+            next[gid] = {
+              ...(next[gid] ?? { groupId: gid, groupName: "Group" }),
+              groupId: gid,
+              targetWorkouts: gd?.targetWorkouts ?? undefined,
+              goalDateISO: gd?.goalDateISO ?? undefined,
+            };
+            setCards(Object.values(next));
+          });
+
+          unsubs.push(u1, u2);
         }
 
-        // Add listeners for new groups
-        for (const gid of nextGroupIds) {
-          if (groupUnsubsRef.current[gid]) continue;
-
-          const perGroupUnsubs: Array<() => void> = [];
-
-          // Group metadata (requires /groups/{gid}/members/{uid} to exist per your rules)
-          const u1 = onSnapshot(
-            groupDoc(gid),
-            (gs) => {
-              const g = gs.data() as any;
-              upsert(gid, {
-                groupName: g?.name ?? "Group",
-                inviteCode: g?.inviteCode,
-              });
-            },
-            (err) => console.log("groupDoc listener error:", err?.message)
-          );
-
-          // User membership mirror doc (owner-only read per your rules) where we store goal fields
-          const u2 = onSnapshot(
-            userGroupDoc(user.uid, gid),
-            (us) => {
-              const m = us.data() as any;
-              upsert(gid, {
-                targetWorkouts: m?.targetWorkouts ?? undefined,
-                goalDateISO: m?.goalDateISO ?? undefined,
-              });
-            },
-            (err) => console.log("userGroupDoc listener error:", err?.message)
-          );
-
-          perGroupUnsubs.push(u1, u2);
-          groupUnsubsRef.current[gid] = perGroupUnsubs;
-        }
-
-        setCards(Object.values(cardsByGroupRef.current));
+        return () => unsubs.forEach((f) => f());
       },
       (err) => Alert.alert("Home error", err.message)
     );
 
-    return () => {
-      unsubUserGroups();
-      cleanupAllGroupListeners();
-      cardsByGroupRef.current = {};
-      setCards([]);
-    };
+    return unsub;
   }, [user]);
 
   const width = Dimensions.get("window").width;
+
+  // Two tiles visible at once, with margins and spacing
   const sidePadding = 16;
   const tileGap = 12;
-
   const tileWidth = useMemo(() => {
-    const usable = width - sidePadding * 2 - tileGap;
+    const usable = width - sidePadding * 2 - tileGap; // 2 tiles + 1 gap
     return Math.floor(usable / 2);
   }, [width]);
 
@@ -160,19 +109,51 @@ export default function HomeScreen() {
     if (idx !== activeIndex) setActiveIndex(idx);
   }
 
-  // NOTE: GlobalWorkoutLogModal only collects { type, notes }.
-  // We apply sane MVP defaults for duration + date.
-  async function submitGlobalWorkout(payload: { type: string; notes?: string }) {
-    if (!user) return;
-
-    await logWorkoutToAllGroups({
-      userId: user.uid,
-      activityTypes: [payload.type],
-      durationMinutes: 30,
-      date: new Date(),
-      notes: payload.notes,
+  async function logWorkoutGlobally({
+    userId,
+    workoutType,
+    notes,
+  }: {
+    userId: string;
+    workoutType: WorkoutType;
+    notes?: string;
+  }) {
+    await addDoc(collection(db, "users", userId, "workouts"), {
+      type: workoutType,
+      notes: notes ?? "",
+      createdAt: serverTimestamp(),
     });
 
+    const groupsSnap = await getDocs(userGroupsCol(userId));
+    const groupIds = groupsSnap.docs.map((d) => d.id);
+
+    for (const groupId of groupIds) {
+      await addDoc(messagesCol(groupId), {
+        type: "workout",
+        userId,
+        workoutType,
+        text: notes ?? "",
+        createdAt: serverTimestamp(),
+      });
+
+      await setDoc(
+        doc(db, "groups", groupId, "goals", userId),
+        {
+          completedWorkouts: increment(1),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+  }
+
+  async function submitGlobalWorkout(payload: { type: string; notes?: string }) {
+    if (!user) return;
+    await logWorkoutGlobally({
+      userId: user.uid,
+      workoutType: payload.type as WorkoutType,
+      notes: payload.notes,
+    });
     const snap = await getDocs(collection(db, "users", user.uid, "workouts"));
     setGlobalCompleted(snap.size);
   }
@@ -202,6 +183,7 @@ export default function HomeScreen() {
           const progressRatio = target ? globalCompleted / target : 0;
           const progressText = target ? `Progress: ${globalCompleted}/${target}` : "Set your goal";
 
+          // Add gap spacing between tiles
           const isLeftTile = index % 2 === 0;
           const marginRight = isLeftTile ? tileGap : 0;
 
@@ -226,6 +208,7 @@ export default function HomeScreen() {
         }
       />
 
+      {/* Dots like Instagram */}
       {cards.length > 1 ? (
         <View style={{ flexDirection: "row", justifyContent: "center", gap: 8, paddingTop: 4 }}>
           {Array.from({ length: Math.max(1, Math.ceil(cards.length / 2)) }).map((_, i) => {
