@@ -24,6 +24,7 @@ export default function DatePickerModal({
   title,
   initialDateISO,
   minDateISO,
+  maxDateISO,
   onClose,
   onSelect,
 }: {
@@ -31,6 +32,7 @@ export default function DatePickerModal({
   title: string;
   initialDateISO: string;
   minDateISO?: string;
+  maxDateISO?: string;
   onClose: () => void;
   onSelect: (iso: string) => void;
 }) {
@@ -41,6 +43,7 @@ export default function DatePickerModal({
   }, [visible, initialDateISO]);
 
   const minDate = useMemo(() => (minDateISO ? dateFromISO(minDateISO) : undefined), [minDateISO]);
+  const maxDate = useMemo(() => (maxDateISO ? dateFromISO(maxDateISO) : undefined), [maxDateISO]);
 
   return (
     <Modal visible={visible} animationType="slide" transparent presentationStyle="overFullScreen">
@@ -66,6 +69,7 @@ export default function DatePickerModal({
               // iOS: inline is great, but can be unreadable under some themes; compact is more robust
               display={Platform.OS === "ios" ? "compact" : "default"}
               minimumDate={minDate}
+              maximumDate={maxDate}
               // Ensures readable picker on iOS even if device is in dark mode
               themeVariant="light"
               onChange={(_, d) => {

@@ -50,8 +50,6 @@ export default function GroupManageScreen() {
 
       const groupId = snap.docs[0].id;
 
-      await setDoc(doc(db, "users", user.uid, "groups", groupId), { joinedAt: serverTimestamp() }, { merge: true });
-
       await setDoc(
         doc(db, "groups", groupId, "members", user.uid),
         {
@@ -61,6 +59,8 @@ export default function GroupManageScreen() {
         },
         { merge: true }
       );
+
+      await setDoc(doc(db, "users", user.uid, "groups", groupId), { joinedAt: serverTimestamp() }, { merge: true });
 
       nav.navigate("Chat", { groupId });
     } catch (e: any) {
@@ -88,18 +88,18 @@ export default function GroupManageScreen() {
       });
 
       await setDoc(
-        doc(db, "users", user.uid, "groups", g.id),
-        { joinedAt: serverTimestamp(), role: "owner" },
-        { merge: true }
-      );
-
-      await setDoc(
         doc(db, "groups", g.id, "members", user.uid),
         {
           userId: user.uid,
           role: "owner",
           joinDate: serverTimestamp(),
         },
+        { merge: true }
+      );
+
+      await setDoc(
+        doc(db, "users", user.uid, "groups", g.id),
+        { joinedAt: serverTimestamp(), role: "owner" },
         { merge: true }
       );
 

@@ -68,16 +68,37 @@ export default function HomeScreen() {
             setCards(Object.values(next));
           });
 
-          const u2 = onSnapshot(doc(db, "groups", gid, "goals", user.uid), (goalSnap) => {
-            const gd = goalSnap.data() as any;
-            next[gid] = {
-              ...(next[gid] ?? { groupId: gid, groupName: "Group" }),
-              groupId: gid,
-              targetWorkouts: gd?.targetWorkouts ?? undefined,
-              goalDateISO: gd?.goalDateISO ?? undefined,
-            };
-            setCards(Object.values(next));
-          });
+          const u2 = (() => {
+            let unsubGoal = () => {};
+            (async () => {
+              try {
+                await setDoc(
+                  doc(db, "groups", gid, "members", user.uid),
+                  { userId: user.uid, joinDate: serverTimestamp() },
+                  { merge: true }
+                );
+              } catch {
+                // non-fatal
+              }
+
+              unsubGoal = onSnapshot(
+                doc(db, "groups", gid, "goals", user.uid),
+                (goalSnap) => {
+                  const gd = goalSnap.data() as any;
+                  next[gid] = {
+                    ...(next[gid] ?? { groupId: gid, groupName: "Group" }),
+                    groupId: gid,
+                    targetWorkouts: gd?.targetWorkouts ?? undefined,
+                    goalDateISO: gd?.goalDateISO ?? undefined,
+                  };
+                  setCards(Object.values(next));
+                },
+                (err) => Alert.alert("Goal error", err.message)
+              );
+            })();
+
+            return () => unsubGoal();
+          })();
 
           unsubs.push(u1, u2);
         }
@@ -128,6 +149,16 @@ export default function HomeScreen() {
     const groupIds = groupsSnap.docs.map((d) => d.id);
 
     for (const groupId of groupIds) {
+      try {
+        await setDoc(
+          doc(db, "groups", groupId, "members", userId),
+          { userId, joinDate: serverTimestamp() },
+          { merge: true }
+        );
+      } catch {
+        // non-fatal
+      }
+
       await addDoc(messagesCol(groupId), {
         type: "workout",
         userId,
@@ -149,13 +180,17 @@ export default function HomeScreen() {
 
   async function submitGlobalWorkout(payload: { type: string; notes?: string }) {
     if (!user) return;
-    await logWorkoutGlobally({
-      userId: user.uid,
-      workoutType: payload.type as WorkoutType,
-      notes: payload.notes,
-    });
-    const snap = await getDocs(collection(db, "users", user.uid, "workouts"));
-    setGlobalCompleted(snap.size);
+    try {
+      await logWorkoutGlobally({
+        userId: user.uid,
+        workoutType: payload.type as WorkoutType,
+        notes: payload.notes,
+      });
+      const snap = await getDocs(collection(db, "users", user.uid, "workouts"));
+      setGlobalCompleted(snap.size);
+    } catch (e: any) {
+      Alert.alert("Log workout error", e?.message ?? "Something went wrong.");
+    }
   }
 
   return (

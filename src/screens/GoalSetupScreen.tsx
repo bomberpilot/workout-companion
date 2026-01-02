@@ -23,6 +23,18 @@ function todayISO() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function isValidISO(iso: string) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return false;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const da = Number(m[3]);
+  if (mo < 1 || mo > 12) return false;
+  if (da < 1 || da > 31) return false;
+  if (y < 2000 || y > 2100) return false;
+  return true;
+}
+
 export default function GoalSetupScreen() {
   const { params } = useRoute<R>();
   const nav = useNavigation<Nav>();
@@ -30,7 +42,9 @@ export default function GoalSetupScreen() {
 
   const [targetWorkouts, setTargetWorkouts] = useState("12");
   const [goalDateISO, setGoalDateISO] = useState<string>(todayISO());
-  const [showCalendar, setShowCalendar] = useState(false);
+  const [goalStartDateISO, setGoalStartDateISO] = useState<string>(todayISO());
+  const [showGoalCalendar, setShowGoalCalendar] = useState(false);
+  const [showStartCalendar, setShowStartCalendar] = useState(false);
 
   const targetNum = useMemo(() => {
     const n = Number(targetWorkouts);
@@ -45,16 +59,14 @@ export default function GoalSetupScreen() {
     }
 
     const iso = goalDateISO.trim();
-    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
-    if (!m) return Alert.alert("Goal date", "Use format YYYY-MM-DD.");
+    const startIso = goalStartDateISO.trim();
 
-    // Basic range sanity (doesn't check month lengths precisely, but blocks obvious typos)
-    const y = Number(m[1]);
-    const mo = Number(m[2]);
-    const da = Number(m[3]);
-    if (mo < 1 || mo > 12) return Alert.alert("Goal date", "Month must be 01–12.");
-    if (da < 1 || da > 31) return Alert.alert("Goal date", "Day must be 01–31.");
-    if (y < 2000 || y > 2100) return Alert.alert("Goal date", "Year looks off. Use 2000–2100.");
+    if (!isValidISO(startIso)) return Alert.alert("Goal start date", "Use format YYYY-MM-DD.");
+    if (!isValidISO(iso)) return Alert.alert("Goal date", "Use format YYYY-MM-DD.");
+
+    if (startIso > iso) {
+      return Alert.alert("Goal dates", "Start date must be on or before the goal date.");
+    }
 
     // Pull your own displayName so progress doesn't need cross-user reads
     let displayName = "";
@@ -66,12 +78,24 @@ export default function GoalSetupScreen() {
     }
     if (!displayName) displayName = user.uid.slice(0, 6);
 
+    // Ensure membership exists before writing goals
+    try {
+      await setDoc(
+        doc(db, "groups", params.groupId, "members", user.uid),
+        { userId: user.uid, joinDate: serverTimestamp() },
+        { merge: true }
+      );
+    } catch {
+      // non-fatal
+    }
+
     await setDoc(
       doc(db, "groups", params.groupId, "goals", user.uid),
       {
         displayName,
         targetWorkouts: targetNum,
         goalDateISO: iso,
+        goalStartDateISO: startIso,
         completedWorkouts: 0,
         updatedAt: serverTimestamp(),
         createdAt: serverTimestamp(),
@@ -87,13 +111,38 @@ export default function GoalSetupScreen() {
       <Tile>
         <Text style={{ fontSize: 20, fontWeight: "900" }}>Set your goal</Text>
         <Text style={{ opacity: 0.7, marginTop: 6 }}>
-          Choose a goal date and how many workouts you want by then.
+          Choose a goal start date, goal date, and how many workouts you want by then.
         </Text>
+
+        <Text style={{ marginTop: 14, fontWeight: "800" }}>Goal start date</Text>
+
+        <Pressable
+          onPress={() => setShowStartCalendar(true)}
+          style={{
+            marginTop: 8,
+            backgroundColor: "white",
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: "#e6e6e6",
+            paddingVertical: 14,
+            paddingHorizontal: 12,
+          }}
+        >
+          <Text style={{ fontSize: 16, fontWeight: "900" }}>{goalStartDateISO}</Text>
+          <Text style={{ marginTop: 4, opacity: 0.65 }}>Tap to open calendar</Text>
+        </Pressable>
+
+        <TextField
+          label="Goal start date (YYYY-MM-DD)"
+          value={goalStartDateISO}
+          onChangeText={setGoalStartDateISO}
+          placeholder="2026-01-01"
+        />
 
         <Text style={{ marginTop: 14, fontWeight: "800" }}>Goal date</Text>
 
         <Pressable
-          onPress={() => setShowCalendar(true)}
+          onPress={() => setShowGoalCalendar(true)}
           style={{
             marginTop: 8,
             backgroundColor: "white",
@@ -127,14 +176,26 @@ export default function GoalSetupScreen() {
       </Tile>
 
       <DatePickerModal
-        visible={showCalendar}
+        visible={showStartCalendar}
+        title="Select your goal start date"
+        initialDateISO={goalStartDateISO}
+        maxDateISO={goalDateISO}
+        onClose={() => setShowStartCalendar(false)}
+        onSelect={(iso) => {
+          setGoalStartDateISO(iso);
+          setShowStartCalendar(false);
+        }}
+      />
+
+      <DatePickerModal
+        visible={showGoalCalendar}
         title="Select your goal date"
         initialDateISO={goalDateISO}
-        minDateISO={todayISO()}
-        onClose={() => setShowCalendar(false)}
+        minDateISO={goalStartDateISO}
+        onClose={() => setShowGoalCalendar(false)}
         onSelect={(iso) => {
           setGoalDateISO(iso);
-          setShowCalendar(false);
+          setShowGoalCalendar(false);
         }}
       />
     </View>
