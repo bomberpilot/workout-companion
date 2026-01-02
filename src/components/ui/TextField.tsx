@@ -1,44 +1,38 @@
 import React from "react";
-import { View, Text, TextInput } from "react-native";
+import { Text, TextInput, View, TextInputProps } from "react-native";
 
-export default function TextField({
-  label,
-  value,
-  onChangeText,
-  placeholder,
-  keyboardType,
-  secureTextEntry,
-}: {
+type Props = {
   label?: string;
-  value: string;
-  onChangeText: (t: string) => void;
-  placeholder?: string;
-  keyboardType?: "default" | "email-address" | "number-pad";
-  secureTextEntry?: boolean;
-}) {
+} & TextInputProps;
+
+export default function TextField({ label, style, ...props }: Props) {
+  const multiline = !!props.multiline;
+
   return (
-    <View style={{ marginTop: 14 }}>
+    <View style={{ marginBottom: 10 }}>
       {label ? (
-        <Text style={{ fontWeight: "800", marginBottom: 6 }}>{label}</Text>
+        <Text style={{ fontWeight: "800", opacity: 0.7, marginBottom: 6 }}>
+          {label}
+        </Text>
       ) : null}
 
       <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        keyboardType={keyboardType ?? "default"}
-        secureTextEntry={secureTextEntry}
-        autoCapitalize="none"
-        style={{
-          backgroundColor: "white",
-          borderRadius: 14,
-          paddingHorizontal: 14,
-          paddingVertical: 14,
-          borderWidth: 1,
-          borderColor: "#e6e6e6",
-          fontSize: 16,
-        }}
+        {...props}
+        style={[
+          {
+            backgroundColor: "white",
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: "#e6e6e6",
+            paddingHorizontal: 12,
+            paddingVertical: multiline ? 12 : 12,
+            fontSize: 16,
+          },
+          multiline ? { minHeight: 96, textAlignVertical: "top" as const } : null,
+          style,
+        ]}
       />
     </View>
   );
 }
+

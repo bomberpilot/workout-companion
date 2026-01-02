@@ -1,6 +1,6 @@
-import { initializeApp } from "firebase/app";
-import { initializeAuth, getAuth } from "firebase/auth";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
+import { initializeAuth, getAuth, type Auth } from "firebase/auth";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const firebaseConfig = {
@@ -12,28 +12,30 @@ const firebaseConfig = {
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
 
-const app = initializeApp(firebaseConfig);
+export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-// ---- RN auth persistence, Metro-safe loading ----
-let getReactNativePersistence: ((storage: any) => any) | null = null;
+// Load RN persistence via require to keep Metro happy across environments
+type GetReactNativePersistenceFn = (storage: any) => any;
 
+let getReactNativePersistenceFn: GetReactNativePersistenceFn | null = null;
 try {
-  // Preferred (newer firebase)
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  getReactNativePersistence = require("firebase/auth/react-native").getReactNativePersistence;
+  getReactNativePersistenceFn = require("firebase/auth/react-native")?.getReactNativePersistence ?? null;
 } catch {
-  try {
-    // Metro-friendly fallback that exists in many firebase builds
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    getReactNativePersistence = require("firebase/auth/dist/rn/index.js").getReactNativePersistence;
-  } catch {
-    getReactNativePersistence = null;
-  }
+  getReactNativePersistenceFn = null;
 }
 
-export const auth =
-  getReactNativePersistence
-    ? initializeAuth(app, { persistence: getReactNativePersistence(AsyncStorage) })
-    : getAuth(app); // fallback: works, but session won't persist
+// Fast Refresh safe: reuse existing auth if already initialized
+let auth: Auth;
+try {
+  auth = getAuth(app);
+} catch {
+  auth =
+    getReactNativePersistenceFn
+      ? initializeAuth(app, { persistence: getReactNativePersistenceFn(AsyncStorage) })
+      : getAuth(app);
+}
+
+export { auth };
 
 export const db = getFirestore(app);

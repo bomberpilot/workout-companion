@@ -1,53 +1,252 @@
-import { addDoc, collection, doc, getDocs, serverTimestamp, updateDoc, increment, setDoc } from "firebase/firestore";
+// src/firestore/actions.ts
+
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where,
+  deleteDoc,
+  Timestamp,
+} from "firebase/firestore";
 import { db } from "../config/firebase";
-import { WorkoutType } from "../types/models";
-import { userGroupsCol, messagesCol, goalDoc } from "./paths";
+import type { GroupGoalType, GroupRole, GroupType } from "../types/models";
+import { groupMemberDoc, groupsCol, messagesCol, userGroupDoc, userGroupsCol, userWorkoutsCol } from "./paths";
 
-export async function logWorkoutGlobally({
-  userId,
-  workoutType,
-  notes,
-}: {
-  userId: string;
-  workoutType: WorkoutType;
-  notes?: string;
-}) {
-  // 1) Create a user workout record (your own history)
-  await addDoc(collection(db, "users", userId, "workouts"), {
-    type: workoutType,
-    notes: notes ?? "",
-    createdAt: serverTimestamp(),
-  });
+type CreateGroupInput = {
+  name: string;
+  type: GroupType;
+  createdBy: string;
+  ownerNickname: string;
+};
 
-  // 2) Fan out a workout message to each group + increment progress for that group
-  const groupsSnap = await getDocs(userGroupsCol(userId));
-  const groupIds = groupsSnap.docs.map((d) => d.id);
+type GroupSettingsPatch = {
+  goalType: GroupGoalType;
+  targetValue: number;
+  startDate: Timestamp;
+  endDate: Timestamp;
+};
 
-  for (const groupId of groupIds) {
-    // message into chat
-    await addDoc(messagesCol(groupId), {
-      type: "workout",
-      userId,
-      workoutType,
-      text: notes ?? "",
-      createdAt: serverTimestamp(),
-    });
+function makeInviteCode(len = 6) {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let out = "";
+  for (let i = 0; i < len; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return out;
+}
 
-    // increment progress in the user's goal doc for this group
-    const gRef = goalDoc(groupId, userId);
+export async function ensureUserProfileDoc(params: { userId: string; email?: string }) {
+  const ref = doc(db, "users", params.userId);
+  const snap = await getDoc(ref);
 
-    // If the goal doc does not exist yet, create a minimal one so increment works later
+  if (!snap.exists()) {
     await setDoc(
-      gRef,
+      ref,
       {
-        completedWorkouts: increment(1),
+        email: params.email ?? "",
+        displayName: "",
+        createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       },
       { merge: true }
     );
+  }
+}
 
-    // (setDoc+increment is sufficient; updateDoc not necessary)
+export async function createGroup(input: CreateGroupInput) {
+  const inviteCode = makeInviteCode();
+
+  const now = new Date();
+  const start = Timestamp.fromDate(now);
+  const end = Timestamp.fromDate(new Date(now.getTime() + 1000 * 60 * 60 * 24 * 30));
+
+  const gRef = await addDoc(groupsCol(), {
+    name: input.name,
+    type: input.type,
+    inviteCode,
+    createdBy: input.createdBy,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+
+    goalType: "frequency",
+    targetValue: 12,
+    startDate: start,
+    endDate: end,
+  });
+
+  await addMemberToGroup({
+    groupId: gRef.id,
+    userId: input.createdBy,
+    nickname: input.ownerNickname,
+    role: "owner",
+  });
+
+  return { groupId: gRef.id, inviteCode };
+}
+
+export async function joinGroupByInviteCode(params: { userId: string; inviteCode: string; nickname: string }) {
+  const code = params.inviteCode.trim().toUpperCase();
+  const qy = query(collection(db, "groups"), where("inviteCode", "==", code));
+  const snap = await getDocs(qy);
+  if (snap.empty) throw new Error("No group matches that invite code.");
+
+  const groupId = snap.docs[0].id;
+
+  await addMemberToGroup({
+    groupId,
+    userId: params.userId,
+    nickname: params.nickname,
+    role: "member",
+  });
+
+  return { groupId };
+}
+
+export async function addMemberToGroup(params: {
+  groupId: string;
+  userId: string;
+  nickname: string;
+  role: GroupRole;
+}) {
+  await setDoc(
+    groupMemberDoc(params.groupId, params.userId),
+    {
+      userId: params.userId,
+      nickname: params.nickname ?? "",
+      role: params.role,
+      joinDate: serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  await setDoc(
+    userGroupDoc(params.userId, params.groupId),
+    {
+      joinedAt: serverTimestamp(),
+      role: params.role,
+      nickname: params.nickname ?? "",
+    },
+    { merge: true }
+  );
+}
+
+export async function leaveGroup(params: { groupId: string; userId: string }) {
+  await deleteDoc(groupMemberDoc(params.groupId, params.userId));
+  await deleteDoc(userGroupDoc(params.userId, params.groupId));
+}
+
+export async function updateGroupSettings(params: { groupId: string; patch: GroupSettingsPatch }) {
+  const ref = doc(db, "groups", params.groupId);
+  await updateDoc(ref, {
+    ...params.patch,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function createWorkout(params: {
+  userId: string;
+  activityTypes: string[];
+  durationMinutes: number;
+  date: Date;
+  notes?: string;
+}) {
+  const payload = {
+    activityTypes: params.activityTypes,
+    durationMinutes: Math.max(0, Math.floor(params.durationMinutes || 0)),
+    date: Timestamp.fromDate(params.date),
+    notes: (params.notes ?? "").trim(),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+
+  const ref = await addDoc(userWorkoutsCol(params.userId), payload);
+  return { workoutId: ref.id, ...payload };
+}
+
+export async function postWorkoutMessageToGroup(params: {
+  groupId: string;
+  userId: string;
+  workoutId: string;
+  workoutDate: Timestamp;
+  activityTypes: string[];
+  durationMinutes: number;
+  groupNote: string;
+}) {
+  await addDoc(messagesCol(params.groupId), {
+    type: "workout",
+    userId: params.userId,
+    workoutId: params.workoutId,
+    workoutDate: params.workoutDate,
+    activityTypes: params.activityTypes,
+    durationMinutes: params.durationMinutes,
+    groupNote: params.groupNote ?? "",
+    createdAt: serverTimestamp(),
+  });
+}
+
+export async function logWorkoutToAllGroups(params: {
+  userId: string;
+  activityTypes: string[];
+  durationMinutes: number;
+  date: Date;
+  notes?: string;
+}) {
+  const w = await createWorkout({
+    userId: params.userId,
+    activityTypes: params.activityTypes,
+    durationMinutes: params.durationMinutes,
+    date: params.date,
+    notes: params.notes,
+  });
+
+  const groupsSnap = await getDocs(userGroupsCol(params.userId));
+  const groupIds = groupsSnap.docs.map((d) => d.id);
+
+  for (const groupId of groupIds) {
+    await postWorkoutMessageToGroup({
+      groupId,
+      userId: params.userId,
+      workoutId: w.workoutId,
+      workoutDate: w.date,
+      activityTypes: w.activityTypes,
+      durationMinutes: w.durationMinutes,
+      groupNote: "",
+    });
   }
 
-  return { groupIdsCount: groupIds.length };
+  return { groupsCount: groupIds.length, workoutId: w.workoutId };
+}
+
+export async function logWorkoutFromGroupChat(params: {
+  groupId: string;
+  userId: string;
+  activityTypes: string[];
+  durationMinutes: number;
+  date: Date;
+  notes?: string;
+  groupNote: string;
+}) {
+  const w = await createWorkout({
+    userId: params.userId,
+    activityTypes: params.activityTypes,
+    durationMinutes: params.durationMinutes,
+    date: params.date,
+    notes: params.notes,
+  });
+
+  await postWorkoutMessageToGroup({
+    groupId: params.groupId,
+    userId: params.userId,
+    workoutId: w.workoutId,
+    workoutDate: w.date,
+    activityTypes: w.activityTypes,
+    durationMinutes: w.durationMinutes,
+    groupNote: params.groupNote ?? "",
+  });
+
+  return { workoutId: w.workoutId };
 }

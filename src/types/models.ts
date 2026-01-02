@@ -1,31 +1,71 @@
-export type WorkoutType = "cardio" | "strength" | "flexibility" | "sport" | "other";
+// src/types/models.ts
 
-export type ChatMessage =
-  | {
-      type: "text";
-      userId: string;
-      text: string;
-      createdAt: any;
-    }
-  | {
-      type: "workout";
-      userId: string;
-      workoutType: WorkoutType;
-      text?: string; // notes
-      createdAt: any;
-    };
+import type { Timestamp } from "firebase/firestore";
 
-export type GroupGoal = {
-  displayName?: string;
-  targetWorkouts?: number;
-  goalDateISO?: string; // "YYYY-MM-DD"
-  completedWorkouts?: number; // per-group counter incremented on global logs
-  createdAt?: any;
-  updatedAt?: any;
+export type GroupType = "friends" | "family" | "coworkers" | "other";
+export type GroupGoalType = "frequency" | "duration";
+export type GroupRole = "owner" | "admin" | "member";
+
+export type UserProfile = {
+  uid: string;
+  email?: string;
+  displayName: string;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
 };
 
-export type UserWorkout = {
-  type: WorkoutType;
-  notes?: string | null;
-  createdAt?: any;
+export type Group = {
+  id: string;
+  name: string;
+  type: GroupType;
+  inviteCode: string;
+
+  createdBy: string;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+
+  // NEW: group goal settings
+  goalType: GroupGoalType;     // "frequency" | "duration"
+  targetValue: number;         // workouts count OR minutes
+  startDate: Timestamp;
+  endDate: Timestamp;
+};
+
+export type GroupMember = {
+  userId: string;
+  nickname: string;            // per-group nickname
+  role: GroupRole;
+  joinDate: Timestamp;
+};
+
+export type Workout = {
+  id: string;
+  userId: string;
+  activityTypes: string[];
+  durationMinutes: number;
+  date: Timestamp;
+  notes?: string;              // NEW: global notes
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+};
+
+export type MessageType = "text" | "workout";
+
+export type ChatMessage = {
+  id: string;
+  type: MessageType;
+  userId: string;
+  createdAt?: Timestamp;
+
+  // text message
+  text?: string;
+
+  // workout message
+  workoutId?: string;
+  workoutDate?: Timestamp;
+  activityTypes?: string[];
+  durationMinutes?: number;
+
+  // saved ONLY on the chat message
+  groupNote?: string;
 };

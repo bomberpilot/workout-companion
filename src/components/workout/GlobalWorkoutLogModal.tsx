@@ -12,13 +12,13 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import TextField from "../ui/TextField";
-import { WorkoutType } from "../../types/models";
-
-const TYPES: WorkoutType[] = ["cardio", "strength", "flexibility", "sport", "other"];
 
 function cap(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
+
+const TYPE_OPTIONS = ["strength", "cardio", "sport", "mobility", "other"] as const;
+type WorkoutTypeLite = (typeof TYPE_OPTIONS)[number];
 
 export default function GlobalWorkoutLogModal({
   visible,
@@ -27,17 +27,14 @@ export default function GlobalWorkoutLogModal({
 }: {
   visible: boolean;
   onClose: () => void;
-  onSubmit: (payload: { type: WorkoutType; notes?: string }) => Promise<void>;
+  onSubmit: (payload: { type: string; notes?: string }) => Promise<void>;
 }) {
   const insets = useSafeAreaInsets();
-  const [type, setType] = useState<WorkoutType>("strength");
+  const [type, setType] = useState<WorkoutTypeLite>("strength");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const notesClean = useMemo(() => {
-    const t = notes.trim();
-    return t.length ? t : undefined;
-  }, [notes]);
+  const notesClean = useMemo(() => (notes ?? "").trim(), [notes]);
 
   async function submit() {
     if (submitting) return;
@@ -64,76 +61,69 @@ export default function GlobalWorkoutLogModal({
                 padding: 16,
                 borderTopLeftRadius: 18,
                 borderTopRightRadius: 18,
-                paddingBottom: Math.max(16, insets.bottom + 12),
+                paddingBottom: Math.max(16, insets.bottom + 10),
               }}
             >
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                 <Text style={{ fontSize: 18, fontWeight: "900" }}>Log workout</Text>
-                <Pressable
-                  onPress={() => {
-                    Keyboard.dismiss();
-                    onClose();
-                  }}
-                  style={{ padding: 8 }}
-                >
-                  <Text style={{ fontSize: 16, opacity: 0.7, fontWeight: "800" }}>Close</Text>
+                <Pressable onPress={onClose} style={{ padding: 8 }}>
+                  <Text style={{ fontWeight: "900" }}>Close</Text>
                 </Pressable>
               </View>
 
-              <Text style={{ marginTop: 10, opacity: 0.7 }}>
-                This will post to every group you are in.
+              <Text style={{ opacity: 0.7, marginTop: 6 }}>
+                This logs to your personal workouts and posts a message to each group.
               </Text>
 
-              <ScrollView keyboardShouldPersistTaps="handled">
-                <Text style={{ marginTop: 14, fontWeight: "800" }}>Type</Text>
-
-                <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 8 }}>
-                  {TYPES.map((t) => (
-                    <Pressable
-                      key={t}
-                      onPress={() => setType(t)}
-                      style={{
-                        paddingVertical: 8,
-                        paddingHorizontal: 12,
-                        borderRadius: 999,
-                        borderWidth: 1,
-                        borderColor: type === t ? "#111" : "#ddd",
-                        marginRight: 8,
-                        marginBottom: 8,
-                        backgroundColor: type === t ? "#111" : "white",
-                      }}
-                    >
-                      <Text style={{ fontWeight: "700", color: type === t ? "white" : "#111" }}>
-                        {cap(t)}
-                      </Text>
-                    </Pressable>
-                  ))}
+              <Text style={{ marginTop: 14, fontWeight: "800" }}>Type</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  {TYPE_OPTIONS.map((t) => {
+                    const selected = t === type;
+                    return (
+                      <Pressable
+                        key={t}
+                        onPress={() => setType(t)}
+                        style={{
+                          paddingVertical: 10,
+                          paddingHorizontal: 14,
+                          borderRadius: 999,
+                          borderWidth: 1,
+                          borderColor: selected ? "#111" : "#ddd",
+                          backgroundColor: selected ? "#111" : "white",
+                        }}
+                      >
+                        <Text style={{ fontWeight: "900", color: selected ? "white" : "#111" }}>
+                          {cap(t)}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
                 </View>
-
-                <TextField
-                  label="Notes (optional)"
-                  value={notes}
-                  onChangeText={setNotes}
-                  placeholder="A few notes, or a complaint"
-                />
-
-                <Pressable
-                  onPress={submit}
-                  disabled={submitting}
-                  style={{
-                    marginTop: 12,
-                    backgroundColor: "#111",
-                    borderRadius: 16,
-                    paddingVertical: 14,
-                    alignItems: "center",
-                    opacity: submitting ? 0.7 : 1,
-                  }}
-                >
-                  <Text style={{ color: "white", fontWeight: "900" }}>
-                    {submitting ? "Posting…" : "Post to all groups"}
-                  </Text>
-                </Pressable>
               </ScrollView>
+
+              <TextField
+                label="Notes (optional)"
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Anything you want to add…"
+                multiline
+              />
+
+              <Pressable
+                onPress={submit}
+                style={{
+                  marginTop: 12,
+                  backgroundColor: submitting ? "#444" : "#111",
+                  borderRadius: 18,
+                  paddingVertical: 14,
+                  alignItems: "center",
+                }}
+              >
+                <Text style={{ color: "white", fontWeight: "900" }}>
+                  {submitting ? "Logging…" : "Log workout"}
+                </Text>
+              </Pressable>
             </View>
           </KeyboardAvoidingView>
         </View>

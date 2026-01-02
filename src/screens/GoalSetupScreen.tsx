@@ -10,7 +10,6 @@ import { db } from "../config/firebase";
 import Tile from "../components/ui/Tile";
 import TextField from "../components/ui/TextField";
 import Button from "../components/ui/Button";
-import DatePickerModal from "../components/ui/DatePickerModal";
 
 type R = RouteProp<RootStackParamList, "GoalSetup">;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -30,7 +29,21 @@ export default function GoalSetupScreen() {
 
   const [targetWorkouts, setTargetWorkouts] = useState("12");
   const [goalDateISO, setGoalDateISO] = useState<string>(todayISO());
-  const [showCalendar, setShowCalendar] = useState(false);
+  const [displayName, setDisplayName] = useState("");
+
+  // Optional: pull displayName for future UI (non-blocking)
+  React.useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, "users", user.uid));
+        const d = snap.data() as any;
+        if (d?.displayName) setDisplayName(d.displayName);
+      } catch {
+        // ignore
+      }
+    })();
+  }, [user]);
 
   const targetNum = useMemo(() => {
     const n = Number(targetWorkouts);
@@ -48,33 +61,16 @@ export default function GoalSetupScreen() {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
     if (!m) return Alert.alert("Goal date", "Use format YYYY-MM-DD.");
 
-    // Basic range sanity (doesn't check month lengths precisely, but blocks obvious typos)
-    const y = Number(m[1]);
-    const mo = Number(m[2]);
-    const da = Number(m[3]);
-    if (mo < 1 || mo > 12) return Alert.alert("Goal date", "Month must be 01–12.");
-    if (da < 1 || da > 31) return Alert.alert("Goal date", "Day must be 01–31.");
-    if (y < 2000 || y > 2100) return Alert.alert("Goal date", "Year looks off. Use 2000–2100.");
-
-    // Pull your own displayName so progress doesn't need cross-user reads
-    let displayName = "";
-    try {
-      const snap = await getDoc(doc(db, "users", user.uid));
-      displayName = String((snap.data() as any)?.displayName ?? "").trim();
-    } catch {
-      // non-fatal
-    }
-    if (!displayName) displayName = user.uid.slice(0, 6);
-
+    // Write goal fields onto the USER membership mirror doc:
+    // users/{uid}/groups/{groupId}
     await setDoc(
-      doc(db, "groups", params.groupId, "goals", user.uid),
+      doc(db, "users", user.uid, "groups", params.groupId),
       {
-        displayName,
+        nickname: displayName || undefined,
         targetWorkouts: targetNum,
         goalDateISO: iso,
-        completedWorkouts: 0,
+        goalUpdatedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
       },
       { merge: true }
     );
@@ -89,24 +85,6 @@ export default function GoalSetupScreen() {
         <Text style={{ opacity: 0.7, marginTop: 6 }}>
           Choose a goal date and how many workouts you want by then.
         </Text>
-
-        <Text style={{ marginTop: 14, fontWeight: "800" }}>Goal date</Text>
-
-        <Pressable
-          onPress={() => setShowCalendar(true)}
-          style={{
-            marginTop: 8,
-            backgroundColor: "white",
-            borderRadius: 14,
-            borderWidth: 1,
-            borderColor: "#e6e6e6",
-            paddingVertical: 14,
-            paddingHorizontal: 12,
-          }}
-        >
-          <Text style={{ fontSize: 16, fontWeight: "900" }}>{goalDateISO}</Text>
-          <Text style={{ marginTop: 4, opacity: 0.65 }}>Tap to open calendar</Text>
-        </Pressable>
 
         <TextField
           label="Goal date (YYYY-MM-DD)"
@@ -123,20 +101,23 @@ export default function GoalSetupScreen() {
           keyboardType="number-pad"
         />
 
-        <Button title="Save goal" onPress={save} />
-      </Tile>
+        <Pressable
+          onPress={save}
+          style={{
+            marginTop: 12,
+            backgroundColor: "#111",
+            borderRadius: 18,
+            paddingVertical: 14,
+            alignItems: "center",
+          }}
+        >
+          <Text style={{ color: "white", fontWeight: "900" }}>Save goal</Text>
+        </Pressable>
 
-      <DatePickerModal
-        visible={showCalendar}
-        title="Select your goal date"
-        initialDateISO={goalDateISO}
-        minDateISO={todayISO()}
-        onClose={() => setShowCalendar(false)}
-        onSelect={(iso) => {
-          setGoalDateISO(iso);
-          setShowCalendar(false);
-        }}
-      />
+        <View style={{ height: 10 }} />
+
+        <Button title="Skip for now" onPress={() => nav.navigate("Chat", { groupId: params.groupId })} />
+      </Tile>
     </View>
   );
 }

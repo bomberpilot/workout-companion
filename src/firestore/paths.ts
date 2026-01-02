@@ -1,20 +1,53 @@
+// src/firestore/paths.ts
+
 import { collection, doc } from "firebase/firestore";
 import { db } from "../config/firebase";
 
 /**
- * User-scoped subcollections
+ * Root collections
  */
-export const userGroupsCol = (uid: string) => collection(db, "users", uid, "groups");
-export const userWorkoutsCol = (uid: string) => collection(db, "users", uid, "workouts");
+export const usersCol = () => collection(db, "users");
+export const userDoc = (userId: string) => doc(db, "users", userId);
 
-/**
- * Group-scoped docs/collections
- */
+export const groupsCol = () => collection(db, "groups");
 export const groupDoc = (groupId: string) => doc(db, "groups", groupId);
-export const messagesCol = (groupId: string) => collection(db, "groups", groupId, "messages");
 
 /**
- * Goals: one goal doc per (groupId, userId)
- * Stored at: groups/{groupId}/goals/{uid}
+ * User subcollections
  */
-export const goalDoc = (groupId: string, uid: string) => doc(db, "groups", groupId, "goals", uid);
+export const userGroupsCol = (userId: string) =>
+  collection(db, "users", userId, "groups");
+
+export const userGroupDoc = (userId: string, groupId: string) =>
+  doc(db, "users", userId, "groups", groupId);
+
+export const userWorkoutsCol = (userId: string) =>
+  collection(db, "users", userId, "workouts");
+
+export const userWorkoutDoc = (userId: string, workoutId: string) =>
+  doc(db, "users", userId, "workouts", workoutId);
+
+/**
+ * User private data
+ * (single-document pattern for active goal)
+ */
+export const userPrivateCol = (userId: string) =>
+  collection(db, "users", userId, "private");
+
+export const goalDoc = (userId: string) =>
+  doc(db, "users", userId, "private", "goal");
+
+/**
+ * Group subcollections
+ */
+export const messagesCol = (groupId: string) =>
+  collection(db, "groups", groupId, "messages");
+
+export const messageDoc = (groupId: string, messageId: string) =>
+  doc(db, "groups", groupId, "messages", messageId);
+
+export const groupMembersCol = (groupId: string) =>
+  collection(db, "groups", groupId, "members");
+
+export const groupMemberDoc = (groupId: string, userId: string) =>
+  doc(db, "groups", groupId, "members", userId);

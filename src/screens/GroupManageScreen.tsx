@@ -52,6 +52,16 @@ export default function GroupManageScreen() {
 
       await setDoc(doc(db, "users", user.uid, "groups", groupId), { joinedAt: serverTimestamp() }, { merge: true });
 
+      await setDoc(
+        doc(db, "groups", groupId, "members", user.uid),
+        {
+          userId: user.uid,
+          role: "member",
+          joinDate: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
       nav.navigate("Chat", { groupId });
     } catch (e: any) {
       Alert.alert("Join error", e?.message ?? "Something went wrong.");
@@ -80,6 +90,16 @@ export default function GroupManageScreen() {
       await setDoc(
         doc(db, "users", user.uid, "groups", g.id),
         { joinedAt: serverTimestamp(), role: "owner" },
+        { merge: true }
+      );
+
+      await setDoc(
+        doc(db, "groups", g.id, "members", user.uid),
+        {
+          userId: user.uid,
+          role: "owner",
+          joinDate: serverTimestamp(),
+        },
         { merge: true }
       );
 
