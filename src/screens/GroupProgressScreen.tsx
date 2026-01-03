@@ -11,6 +11,7 @@ import Tile from "../components/ui/Tile";
 import TextField from "../components/ui/TextField";
 import Button from "../components/ui/Button";
 import { groupMemberDoc, groupMembersCol, userGroupDoc } from "../firestore/paths";
+import { formatDurationMinutes } from "../utils/progress";
 
 type R = RouteProp<RootStackParamList, "GroupProgress">;
 type Nav = NativeStackNavigationProp<RootStackParamList, "GroupProgress">;
@@ -20,12 +21,14 @@ type Row = {
   displayName: string;
   target: number;
   completed: number;
+  totalDurationMinutes: number;
 };
 
 type GoalRow = {
   userId: string;
   target: number;
   completed: number;
+  totalDurationMinutes: number;
   displayName?: string;
 };
 
@@ -69,8 +72,9 @@ export default function GroupProgressScreen() {
             const gd = d.data() as any;
             const target = Number(gd?.targetWorkouts ?? 0) || 0;
             const completed = Number(gd?.completedWorkouts ?? 0) || 0;
+            const totalDurationMinutes = Number(gd?.totalDurationMinutes ?? 0) || 0;
             const displayName = String(gd?.displayName ?? "").trim() || d.id.slice(0, 6);
-            return { userId: d.id, displayName, target, completed };
+            return { userId: d.id, displayName, target, completed, totalDurationMinutes };
           });
 
           setGoalRows(next);
@@ -115,6 +119,7 @@ export default function GroupProgressScreen() {
       userId: row.userId,
       target: row.target,
       completed: row.completed,
+      totalDurationMinutes: row.totalDurationMinutes,
       displayName: memberNames[row.userId] ?? row.displayName ?? row.userId.slice(0, 6),
     }));
 
@@ -217,6 +222,7 @@ export default function GroupProgressScreen() {
 
 function ProgressRow({ row }: { row: Row }) {
   const pct = useMemo(() => (row.target ? clamp01(row.completed / row.target) : 0), [row.completed, row.target]);
+  const totalTimeLabel = useMemo(() => formatDurationMinutes(row.totalDurationMinutes || 0), [row.totalDurationMinutes]);
 
   return (
     <Tile>
@@ -239,9 +245,14 @@ function ProgressRow({ row }: { row: Row }) {
         <View style={{ width: `${pct * 100}%`, height: "100%", backgroundColor: "#111" }} />
       </View>
 
-      <Text style={{ marginTop: 8, opacity: 0.6 }}>
-        {row.target ? `${Math.round(pct * 100)}%` : "Set a target to track progress"}
-      </Text>
+      <View style={{ marginTop: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+        <Text style={{ opacity: 0.6 }}>
+          {row.target ? `${Math.round(pct * 100)}%` : "Set a target to track progress"}
+        </Text>
+        <Text style={{ opacity: 0.6, fontWeight: "700" }}>
+          Total Workout Time: {totalTimeLabel}
+        </Text>
+      </View>
     </Tile>
   );
 }

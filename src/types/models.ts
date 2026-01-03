@@ -69,3 +69,23 @@ export type ChatMessage = {
   // saved ONLY on the chat message
   groupNote?: string;
 };
+
+export type NotificationType = "group_workout";
+
+export type AppNotification = {
+  id: string;
+  type: NotificationType;
+  userId: string;
+  actorUserId: string;
+  actorName: string;
+  groupId: string;
+  workoutId: string;
+  message: string;
+  createdAt?: Timestamp;
+  read?: boolean;
+};
+
+export type UserSettings = {
+  notificationsEnabled: boolean;
+  updatedAt?: Timestamp;
+};

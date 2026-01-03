@@ -14,10 +14,21 @@ import {
   where,
   deleteDoc,
   Timestamp,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "../config/firebase";
 import type { GroupGoalType, GroupRole, GroupType } from "../types/models";
-import { groupMemberDoc, groupsCol, messagesCol, userGroupDoc, userGroupsCol, userWorkoutsCol } from "./paths";
+import {
+  groupMemberDoc,
+  groupMembersCol,
+  groupsCol,
+  messagesCol,
+  userGroupDoc,
+  userGroupsCol,
+  userNotificationsCol,
+  userSettingsDoc,
+  userWorkoutsCol,
+} from "./paths";
 
 type CreateGroupInput = {
   name: string;
@@ -189,6 +200,50 @@ export async function postWorkoutMessageToGroup(params: {
   });
 }
 
+async function notifyGroupWorkoutMembers(params: {
+  groupId: string;
+  actorUserId: string;
+  workoutId: string;
+}) {
+  const actorSnap = await getDoc(groupMemberDoc(params.groupId, params.actorUserId));
+  const actorNickname = ((actorSnap.data() as any)?.nickname ?? "").trim();
+  const actorName = actorNickname || "Someone";
+  const message = `${actorName} logged a workout! Check out your group's progress, and cheer them on!`;
+
+  const membersSnap = await getDocs(groupMembersCol(params.groupId));
+  const memberIds = membersSnap.docs
+    .map((member) => member.id)
+    .filter((memberId) => memberId !== params.actorUserId);
+
+  if (memberIds.length === 0) return;
+
+  const settingsSnaps = await Promise.all(
+    memberIds.map((memberId) => getDoc(userSettingsDoc(memberId)))
+  );
+
+  const batch = writeBatch(db);
+
+  memberIds.forEach((memberId, index) => {
+    const settings = settingsSnaps[index].data() as { notificationsEnabled?: boolean } | undefined;
+    if (settings?.notificationsEnabled === false) return;
+
+    const ref = doc(userNotificationsCol(memberId));
+    batch.set(ref, {
+      type: "group_workout",
+      userId: memberId,
+      actorUserId: params.actorUserId,
+      actorName,
+      groupId: params.groupId,
+      workoutId: params.workoutId,
+      message,
+      read: false,
+      createdAt: serverTimestamp(),
+    });
+  });
+
+  await batch.commit();
+}
+
 export async function logWorkoutToAllGroups(params: {
   userId: string;
   activityTypes: string[];
@@ -216,6 +271,12 @@ export async function logWorkoutToAllGroups(params: {
       activityTypes: w.activityTypes,
       durationMinutes: w.durationMinutes,
       groupNote: params.notes ?? "",
+    });
+
+    await notifyGroupWorkoutMembers({
+      groupId,
+      actorUserId: params.userId,
+      workoutId: w.workoutId,
     });
 
     await setDoc(
@@ -256,6 +317,12 @@ export async function logWorkoutFromGroupChat(params: {
     activityTypes: w.activityTypes,
     durationMinutes: w.durationMinutes,
     groupNote: params.groupNote ?? params.notes ?? "",
+  });
+
+  await notifyGroupWorkoutMembers({
+    groupId: params.groupId,
+    actorUserId: params.userId,
+    workoutId: w.workoutId,
   });
 
   await setDoc(

@@ -2,14 +2,34 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, FlatList, Dimensions, Pressable, Alert, NativeSyntheticEvent, NativeScrollEvent } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { collection, doc, getDocs, onSnapshot, query, serverTimestamp, setDoc } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  getDocs,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where,
+  writeBatch,
+} from "firebase/firestore";
 
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { useAuth } from "../auth/useAuth";
-import { userGroupsCol, groupDoc } from "../firestore/paths";
+import {
+  groupDoc,
+  userGroupsCol,
+  userNotificationDoc,
+  userNotificationsCol,
+  userSettingsDoc,
+} from "../firestore/paths";
 import LogWorkoutModal from "../components/workout/LogWorkoutModal";
 import GoalTile from "../components/home/GoalTile";
 import { db } from "../config/firebase";
+import type { AppNotification, UserSettings } from "../types/models";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "Home">;
 
@@ -29,6 +49,8 @@ export default function HomeScreen() {
   const [showLog, setShowLog] = useState(false);
   const [globalCompleted, setGlobalCompleted] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
   // Global workout count for current user (MVP: all-time)
   useEffect(() => {
@@ -108,6 +130,70 @@ export default function HomeScreen() {
 
     return unsub;
   }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const settingsUnsub = onSnapshot(
+      userSettingsDoc(user.uid),
+      (snap) => {
+        const data = snap.data() as UserSettings | undefined;
+        setNotificationsEnabled(data?.notificationsEnabled ?? true);
+      },
+      () => setNotificationsEnabled(true)
+    );
+
+    return settingsUnsub;
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || !notificationsEnabled) {
+      setNotifications([]);
+      return;
+    }
+
+    const qy = query(
+      userNotificationsCol(user.uid),
+      where("read", "==", false),
+      orderBy("createdAt", "desc"),
+      limit(5)
+    );
+    const unsub = onSnapshot(
+      qy,
+      (snap) => {
+        const next = snap.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<AppNotification, "id">),
+        }));
+        setNotifications(next);
+      },
+      () => setNotifications([])
+    );
+
+    return unsub;
+  }, [user, notificationsEnabled]);
+
+  async function dismissNotification(notificationId: string) {
+    if (!user) return;
+    try {
+      await updateDoc(userNotificationDoc(user.uid, notificationId), { read: true });
+    } catch {
+      // non-fatal
+    }
+  }
+
+  async function dismissAllNotifications() {
+    if (!user || notifications.length === 0) return;
+    const batch = writeBatch(db);
+    notifications.forEach((notification) => {
+      batch.update(userNotificationDoc(user.uid, notification.id), { read: true });
+    });
+    try {
+      await batch.commit();
+    } catch {
+      // non-fatal
+    }
+  }
 
   const width = Dimensions.get("window").width;
 
@@ -208,6 +294,53 @@ export default function HomeScreen() {
         </View>
       ) : null}
 
+      <View style={{ paddingHorizontal: sidePadding, paddingTop: 16 }}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+          <Text style={{ fontSize: 18, fontWeight: "900" }}>Notifications</Text>
+          <Pressable
+            onPress={dismissAllNotifications}
+            disabled={!notifications.length || !notificationsEnabled}
+            style={({ pressed }) => ({
+              opacity: !notifications.length || !notificationsEnabled ? 0.35 : pressed ? 0.6 : 1,
+            })}
+          >
+            <Text style={{ fontWeight: "700" }}>Dismiss all</Text>
+          </Pressable>
+        </View>
+        {!notificationsEnabled ? (
+          <Text style={{ marginTop: 8, opacity: 0.6 }}>Notifications are turned off in settings.</Text>
+        ) : notifications.length ? (
+          <View style={{ marginTop: 8, gap: 10 }}>
+            {notifications.map((notification) => {
+              const createdAt = notification.createdAt?.toDate?.();
+              const timeLabel = createdAt ? createdAt.toLocaleString() : "Just now";
+              return (
+                <View
+                  key={notification.id}
+                  style={{
+                    backgroundColor: "white",
+                    borderRadius: 14,
+                    padding: 12,
+                    borderWidth: 1,
+                    borderColor: "#ececec",
+                  }}
+                >
+                  <Text style={{ fontWeight: "700" }}>{notification.message}</Text>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6 }}>
+                    <Text style={{ opacity: 0.6, fontSize: 12 }}>{timeLabel}</Text>
+                    <Pressable onPress={() => dismissNotification(notification.id)}>
+                      <Text style={{ fontSize: 12, fontWeight: "700" }}>Dismiss</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        ) : (
+          <Text style={{ marginTop: 8, opacity: 0.6 }}>No notifications yet.</Text>
+        )}
+      </View>
+
       <View style={{ flex: 1 }} />
 
       <View style={{ padding: sidePadding }}>
@@ -255,6 +388,21 @@ export default function HomeScreen() {
             <Text style={{ fontWeight: "800" }}>Profile</Text>
           </Pressable>
         </View>
+
+        <Pressable
+          onPress={() => nav.navigate("Settings")}
+          style={{
+            marginTop: 10,
+            backgroundColor: "white",
+            borderRadius: 16,
+            paddingVertical: 14,
+            alignItems: "center",
+            borderWidth: 1,
+            borderColor: "#e6e6e6",
+          }}
+        >
+          <Text style={{ fontWeight: "800" }}>Settings</Text>
+        </Pressable>
       </View>
 
       {user ? (

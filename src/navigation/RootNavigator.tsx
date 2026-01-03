@@ -10,6 +10,7 @@ import GoalSetupScreen from "../screens/GoalSetupScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import MemberProfileScreen from "../screens/MemberProfileScreen";
 import GroupProgressScreen from "../screens/GroupProgressScreen";
+import SettingsScreen from "../screens/SettingsScreen";
 
 export type RootStackParamList = {
   SignIn: undefined;
@@ -20,6 +21,7 @@ export type RootStackParamList = {
   GoalSetup: { groupId: string };
   Profile: undefined;
   MemberProfile: { groupId: string; userId: string };
+  Settings: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -46,6 +48,7 @@ export default function RootNavigator() {
           <Stack.Screen name="GoalSetup" component={GoalSetupScreen} options={{ title: "Your goal" }} />
           <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: "Profile" }} />
           <Stack.Screen name="MemberProfile" component={MemberProfileScreen} options={{ title: "Member" }} />
+          <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: "Settings" }} />
         </>
       )}
     </Stack.Navigator>

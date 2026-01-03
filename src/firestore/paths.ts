@@ -27,6 +27,12 @@ export const userWorkoutsCol = (userId: string) =>
 export const userWorkoutDoc = (userId: string, workoutId: string) =>
   doc(db, "users", userId, "workouts", workoutId);
 
+export const userNotificationsCol = (userId: string) =>
+  collection(db, "users", userId, "notifications");
+
+export const userNotificationDoc = (userId: string, notificationId: string) =>
+  doc(db, "users", userId, "notifications", notificationId);
+
 /**
  * User private data
  * (single-document pattern for active goal)
@@ -36,6 +42,9 @@ export const userPrivateCol = (userId: string) =>
 
 export const goalDoc = (userId: string) =>
   doc(db, "users", userId, "private", "goal");
+
+export const userSettingsDoc = (userId: string) =>
+  doc(db, "users", userId, "private", "settings");
 
 /**
  * Group subcollections
