@@ -6,8 +6,6 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  TouchableWithoutFeedback,
-  Keyboard,
   Pressable,
 } from "react-native";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
@@ -263,41 +261,40 @@ export default function GroupChatScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={headerHeight}
     >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-        <View style={{ flex: 1 }}>
-          <View style={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 6 }}>
-            <Text style={{ fontSize: 12, opacity: 0.7 }}>
-              Invite code: <Text style={{ fontWeight: "900" }}>{group.inviteCode ?? "—"}</Text>
-            </Text>
-          </View>
-
-          <FlatList
-            data={messagesWithDetails}
-            inverted
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={{ paddingBottom: 190 }}
-            keyboardShouldPersistTaps="handled"
-            renderItem={({ item }) => {
-              const uid = item.userId as string | undefined;
-              const isMine = !!user && !!uid && uid === user.uid;
-              const displayName = uid
-                ? groupNameMap[uid] ?? nameMap[uid] ?? fallbackName(uid)
-                : "System";
-
-              return (
-                <MessageTile
-                  message={item as any}
-                  isMine={isMine}
-                  displayName={displayName}
-                  onPressUser={(userId) => nav.navigate("MemberProfile", { groupId: params.groupId, userId })}
-                />
-              );
-            }}
-          />
-
-          <ComposerBar onSendText={sendText} />
+      <View style={{ flex: 1 }}>
+        <View style={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 6 }}>
+          <Text style={{ fontSize: 12, opacity: 0.7 }}>
+            Invite code: <Text style={{ fontWeight: "900" }}>{group.inviteCode ?? "—"}</Text>
+          </Text>
         </View>
-      </TouchableWithoutFeedback>
+
+        <FlatList
+          data={messagesWithDetails}
+          inverted
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ paddingBottom: 190 }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          renderItem={({ item }) => {
+            const uid = item.userId as string | undefined;
+            const isMine = !!user && !!uid && uid === user.uid;
+            const displayName = uid
+              ? groupNameMap[uid] ?? nameMap[uid] ?? fallbackName(uid)
+              : "System";
+
+            return (
+              <MessageTile
+                message={item as any}
+                isMine={isMine}
+                displayName={displayName}
+                onPressUser={(userId) => nav.navigate("MemberProfile", { groupId: params.groupId, userId })}
+              />
+            );
+          }}
+        />
+
+        <ComposerBar onSendText={sendText} />
+      </View>
 
       {user ? (
         <LogWorkoutModal visible={showLog} onClose={() => setShowLog(false)} userId={user.uid} />

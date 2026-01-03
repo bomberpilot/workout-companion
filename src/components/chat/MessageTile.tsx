@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { View, Text, Pressable, Dimensions } from "react-native";
+import type { Timestamp } from "firebase/firestore";
 import { ChatMessage } from "../../types/models";
 
 export default function MessageTile({
@@ -41,6 +42,9 @@ export default function MessageTile({
   const notesText = groupNote || workoutNotes || legacyNotes;
   const isWorkout = type === "workout";
   const isText = type === "text" || (!type && typeof text === "string");
+  const createdAt = (message as any)?.createdAt as Timestamp | undefined;
+  const workoutDate = (message as any)?.workoutDate as Timestamp | undefined;
+  const dateLabel = useMemo(() => formatMessageDate(createdAt ?? workoutDate), [createdAt, workoutDate]);
 
   const bubbleStyle = isText
     ? {
@@ -86,6 +90,7 @@ export default function MessageTile({
         >
           <Text style={{ fontWeight: "900", opacity: 0.85 }}>{displayName}</Text>
         </Pressable>
+        <Text style={{ marginTop: 4, fontSize: 12, opacity: 0.55 }}>{dateLabel}</Text>
 
         {isWorkout ? (
           <Text style={{ marginTop: 10, fontSize: 16, fontWeight: "900" }}>
@@ -134,4 +139,17 @@ export default function MessageTile({
 
 function cap(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function formatMessageDate(date?: Timestamp) {
+  if (!date?.toDate) return "Date unavailable";
+  const d = date.toDate();
+  if (Number.isNaN(d.getTime())) return "Date unavailable";
+  const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const weekday = weekdays[d.getDay()] ?? "";
+  const month = months[d.getMonth()] ?? "";
+  const day = String(d.getDate());
+  if (!weekday || !month) return "Date unavailable";
+  return `${weekday}, ${month} ${day}`;
 }

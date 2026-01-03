@@ -21,6 +21,7 @@ import type { GroupGoalType, GroupRole, GroupType } from "../types/models";
 import {
   groupMemberDoc,
   groupMembersCol,
+  groupDoc,
   groupsCol,
   messagesCol,
   userGroupDoc,
@@ -43,6 +44,15 @@ type GroupSettingsPatch = {
   startDate: Timestamp;
   endDate: Timestamp;
 };
+
+function shouldCountDuration(groupData: any, workoutDate: Date) {
+  const workoutTime = workoutDate.getTime();
+  if (Number.isNaN(workoutTime)) return false;
+  const startDate = groupData?.startDate;
+  if (startDate?.toMillis && workoutTime < startDate.toMillis()) return false;
+  if (workoutTime > Date.now()) return false;
+  return true;
+}
 
 function makeInviteCode(len = 6) {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -263,6 +273,10 @@ export async function logWorkoutToAllGroups(params: {
   const groupIds = groupsSnap.docs.map((d) => d.id);
 
   for (const groupId of groupIds) {
+    const groupSnap = await getDoc(groupDoc(groupId));
+    const shouldCount = shouldCountDuration(groupSnap.data(), params.date);
+    const durationToAdd = shouldCount && w.durationMinutes > 0 ? w.durationMinutes : 0;
+
     await postWorkoutMessageToGroup({
       groupId,
       userId: params.userId,
@@ -279,12 +293,17 @@ export async function logWorkoutToAllGroups(params: {
       workoutId: w.workoutId,
     });
 
+    const goalPatch: Record<string, any> = {
+      completedWorkouts: increment(1),
+      updatedAt: serverTimestamp(),
+    };
+    if (durationToAdd > 0) {
+      goalPatch.totalDurationMinutes = increment(durationToAdd);
+    }
+
     await setDoc(
       doc(db, "groups", groupId, "goals", params.userId),
-      {
-        completedWorkouts: increment(1),
-        updatedAt: serverTimestamp(),
-      },
+      goalPatch,
       { merge: true }
     );
   }
@@ -325,12 +344,20 @@ export async function logWorkoutFromGroupChat(params: {
     workoutId: w.workoutId,
   });
 
+  const groupSnap = await getDoc(groupDoc(params.groupId));
+  const shouldCount = shouldCountDuration(groupSnap.data(), params.date);
+  const durationToAdd = shouldCount && w.durationMinutes > 0 ? w.durationMinutes : 0;
+  const goalPatch: Record<string, any> = {
+    completedWorkouts: increment(1),
+    updatedAt: serverTimestamp(),
+  };
+  if (durationToAdd > 0) {
+    goalPatch.totalDurationMinutes = increment(durationToAdd);
+  }
+
   await setDoc(
     doc(db, "groups", params.groupId, "goals", params.userId),
-    {
-      completedWorkouts: increment(1),
-      updatedAt: serverTimestamp(),
-    },
+    goalPatch,
     { merge: true }
   );
 
