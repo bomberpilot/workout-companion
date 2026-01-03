@@ -4,7 +4,8 @@ import { useAuth } from "../auth/useAuth";
 
 import SignInScreen from "../screens/SignInScreen";
 import HomeScreen from "../screens/HomeScreen";
-import GroupManageScreen from "../screens/GroupManageScreen";
+import CreateGroupScreen from "../screens/CreateGroupScreen";
+import JoinGroupScreen from "../screens/JoinGroupScreen";
 import GroupChatScreen from "../screens/GroupChatScreen";
 import GoalSetupScreen from "../screens/GoalSetupScreen";
 import ProfileScreen from "../screens/ProfileScreen";
@@ -15,7 +16,8 @@ import SettingsScreen from "../screens/SettingsScreen";
 export type RootStackParamList = {
   SignIn: undefined;
   Home: undefined;
-  GroupManage: undefined;
+  CreateGroup: undefined;
+  JoinGroup: undefined;
   Chat: { groupId: string };
   GroupProgress: { groupId: string };
   GoalSetup: { groupId: string };
@@ -42,7 +44,8 @@ export default function RootNavigator() {
             component={HomeScreen}
             options={{ title: "Workout Accountability Companion" }}
           />
-          <Stack.Screen name="GroupManage" component={GroupManageScreen} options={{ title: "Create or join" }} />
+          <Stack.Screen name="CreateGroup" component={CreateGroupScreen} options={{ title: "Create group" }} />
+          <Stack.Screen name="JoinGroup" component={JoinGroupScreen} options={{ title: "Join group" }} />
           <Stack.Screen name="Chat" component={GroupChatScreen} options={{ title: "Group chat" }} />
           <Stack.Screen name="GroupProgress" component={GroupProgressScreen} options={{ title: "Group progress" }} />
           <Stack.Screen name="GoalSetup" component={GoalSetupScreen} options={{ title: "Your goal" }} />

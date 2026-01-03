@@ -1,40 +1,25 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, Alert, Pressable } from "react-native";
-import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
-import { RootStackParamList } from "../navigation/RootNavigator";
+import type { RootStackParamList } from "../navigation/RootNavigator";
 import { useAuth } from "../auth/useAuth";
 import { db } from "../config/firebase";
 import Tile from "../components/ui/Tile";
 import TextField from "../components/ui/TextField";
 import Button from "../components/ui/Button";
+import { GROUP_TYPES, label, makeInviteCode } from "./groupUtils";
 
-type Nav = NativeStackNavigationProp<RootStackParamList, "GroupManage">;
+type Nav = NativeStackNavigationProp<RootStackParamList, "CreateGroup">;
 
-type GroupType = "friends" | "family" | "coworkers" | "other";
-const GROUP_TYPES: GroupType[] = ["friends", "family", "coworkers", "other"];
-
-function label(t: GroupType) {
-  if (t === "coworkers") return "Co-workers";
-  return t.charAt(0).toUpperCase() + t.slice(1);
-}
-
-function makeInviteCode(len = 6) {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let out = "";
-  for (let i = 0; i < len; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
-  return out;
-}
-
-export default function GroupManageScreen() {
+export default function CreateGroupScreen() {
   const nav = useNavigation<Nav>();
   const { user } = useAuth();
 
-  const [inviteCode, setInviteCode] = useState("");
   const [groupName, setGroupName] = useState("");
-  const [groupType, setGroupType] = useState<GroupType>("friends");
+  const [groupType, setGroupType] = useState<(typeof GROUP_TYPES)[number]>("friends");
   const [nickname, setNickname] = useState("");
   const [defaultNickname, setDefaultNickname] = useState("");
   const [busy, setBusy] = useState(false);
@@ -51,47 +36,6 @@ export default function GroupManageScreen() {
       }
     })();
   }, [user]);
-
-  async function joinGroup() {
-    if (!user) return;
-    const code = inviteCode.trim().toUpperCase();
-    if (!code) return Alert.alert("Join group", "Enter an invite code.");
-
-    const nick = nickname.trim() || defaultNickname || user.uid.slice(0, 6);
-
-    setBusy(true);
-    try {
-      const qy = query(collection(db, "groups"), where("inviteCode", "==", code));
-      const snap = await getDocs(qy);
-      if (snap.empty) return Alert.alert("Not found", "No group matches that invite code.");
-
-      const groupId = snap.docs[0].id;
-
-      await setDoc(
-        doc(db, "groups", groupId, "members", user.uid),
-        {
-          userId: user.uid,
-          role: "member",
-          nickname: nick,
-          joinDate: serverTimestamp(),
-        },
-        { merge: true }
-      );
-
-      await setDoc(
-        doc(db, "users", user.uid, "groups", groupId),
-        { joinedAt: serverTimestamp(), nickname: nick },
-        { merge: true }
-      );
-
-      // ✅ After joining, prompt goal setup for this group
-      nav.navigate("GoalSetup", { groupId });
-    } catch (e: any) {
-      Alert.alert("Join error", e?.message ?? "Something went wrong.");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function createGroup() {
     if (!user) return;
@@ -139,21 +83,16 @@ export default function GroupManageScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: "#f6f6f6", padding: 16 }}>
       <Tile>
-        <Text style={{ fontSize: 20, fontWeight: "900" }}>Join or create</Text>
-        <Text style={{ marginTop: 6, opacity: 0.7 }}>Join with a code, or create a new group.</Text>
+        <Text style={{ fontSize: 20, fontWeight: "900" }}>Create group</Text>
+        <Text style={{ marginTop: 6, opacity: 0.7 }}>Set up a new group and invite others.</Text>
 
-        <TextField label="Invite code (join)" value={inviteCode} onChangeText={setInviteCode} placeholder="e.g., BQKW12" />
+        <TextField label="Group name" value={groupName} onChangeText={setGroupName} placeholder="e.g., Family Accountability" />
         <TextField
           label="Your nickname in this group"
           value={nickname}
           onChangeText={setNickname}
           placeholder={defaultNickname || "e.g., Chief"}
         />
-        <Button title={busy ? "Working…" : "Join group"} onPress={joinGroup} disabled={busy} />
-
-        <View style={{ height: 16 }} />
-
-        <TextField label="Group name (create)" value={groupName} onChangeText={setGroupName} placeholder="e.g., Family Accountability" />
 
         <Text style={{ marginTop: 14, fontWeight: "800" }}>Group type</Text>
         <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 8 }}>

@@ -359,7 +359,7 @@ export default function HomeScreen() {
 
         <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
           <Pressable
-            onPress={() => nav.navigate("GroupManage")}
+            onPress={() => nav.navigate("CreateGroup")}
             style={{
               flex: 1,
               backgroundColor: "white",
@@ -370,9 +370,26 @@ export default function HomeScreen() {
               borderColor: "#e6e6e6",
             }}
           >
-            <Text style={{ fontWeight: "800" }}>Create or join</Text>
+            <Text style={{ fontWeight: "800" }}>Create group</Text>
           </Pressable>
 
+          <Pressable
+            onPress={() => nav.navigate("JoinGroup")}
+            style={{
+              flex: 1,
+              backgroundColor: "white",
+              borderRadius: 16,
+              paddingVertical: 14,
+              alignItems: "center",
+              borderWidth: 1,
+              borderColor: "#e6e6e6",
+            }}
+          >
+            <Text style={{ fontWeight: "800" }}>Join group</Text>
+          </Pressable>
+        </View>
+
+        <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
           <Pressable
             onPress={() => nav.navigate("Profile")}
             style={{
@@ -387,22 +404,22 @@ export default function HomeScreen() {
           >
             <Text style={{ fontWeight: "800" }}>Profile</Text>
           </Pressable>
-        </View>
 
-        <Pressable
-          onPress={() => nav.navigate("Settings")}
-          style={{
-            marginTop: 10,
-            backgroundColor: "white",
-            borderRadius: 16,
-            paddingVertical: 14,
-            alignItems: "center",
-            borderWidth: 1,
-            borderColor: "#e6e6e6",
-          }}
-        >
-          <Text style={{ fontWeight: "800" }}>Settings</Text>
-        </Pressable>
+          <Pressable
+            onPress={() => nav.navigate("Settings")}
+            style={{
+              flex: 1,
+              backgroundColor: "white",
+              borderRadius: 16,
+              paddingVertical: 14,
+              alignItems: "center",
+              borderWidth: 1,
+              borderColor: "#e6e6e6",
+            }}
+          >
+            <Text style={{ fontWeight: "800" }}>Settings</Text>
+          </Pressable>
+        </View>
       </View>
 
       {user ? (
