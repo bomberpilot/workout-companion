@@ -1,9 +1,19 @@
 import React, { useMemo, useState } from "react";
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 
 import { RootStackParamList } from "../navigation/RootNavigator";
@@ -23,6 +33,23 @@ function todayISO() {
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
+}
+
+function isoFromDate(d: Date) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function dateFromISO(iso: string) {
+  const [y, m, d] = iso.split("-").map((x) => Number(x));
+  const dt = new Date();
+  dt.setFullYear(y || dt.getFullYear());
+  dt.setMonth((m || 1) - 1);
+  dt.setDate(d || 1);
+  dt.setHours(12, 0, 0, 0);
+  return dt;
 }
 
 function parseISOToUTCDate(iso: string) {
@@ -56,6 +83,16 @@ function isValidISO(iso: string) {
   return true;
 }
 
+function formatDateLabel(iso: string) {
+  const parsed = parseISOToUTCDate(iso);
+  if (!parsed) return iso;
+  return parsed.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 export default function GoalSetupScreen() {
   const { params } = useRoute<R>();
   const nav = useNavigation<Nav>();
@@ -66,7 +103,7 @@ export default function GoalSetupScreen() {
   const [targetWorkouts, setTargetWorkouts] = useState("12");
   const [goalDateISO, setGoalDateISO] = useState<string>(todayISO());
   const [goalStartDateISO, setGoalStartDateISO] = useState<string>(todayISO());
-  const [showGoalCalendar, setShowGoalCalendar] = useState(false);
+  const [goalDateReason, setGoalDateReason] = useState("");
   const [showStartCalendar, setShowStartCalendar] = useState(false);
 
   const targetNum = useMemo(() => {
@@ -80,6 +117,11 @@ export default function GoalSetupScreen() {
     if (days <= 0 || targetNum <= 0) return null;
     return targetNum / days;
   }, [goalStartDateISO, goalDateISO, targetNum]);
+
+  const minGoalDate = useMemo(() => {
+    if (!isValidISO(goalStartDateISO)) return undefined;
+    return dateFromISO(goalStartDateISO);
+  }, [goalStartDateISO]);
 
   async function save() {
     if (!user) return;
@@ -151,68 +193,83 @@ export default function GoalSetupScreen() {
         <Tile>
           <Text style={{ fontSize: 20, fontWeight: "900" }}>Set your goal</Text>
           <Text style={{ opacity: 0.7, marginTop: 6 }}>
-            Choose a goal start date, goal date, and how many workouts you want by then.
+            Pick a goal date first, then choose how many workouts you want by then.
           </Text>
 
-          <Text style={{ marginTop: 14, fontWeight: "800" }}>Goal start date</Text>
+          <Text style={{ marginTop: 18, fontWeight: "800" }}>Goal date</Text>
 
-          <Pressable
-            onPress={() => setShowStartCalendar(true)}
+          <View
             style={{
-              marginTop: 8,
+              marginTop: 10,
               backgroundColor: "white",
-              borderRadius: 14,
+              borderRadius: 16,
               borderWidth: 1,
               borderColor: "#e6e6e6",
-              paddingVertical: 14,
-              paddingHorizontal: 12,
+              padding: 14,
+              gap: 12,
             }}
           >
-            <Text style={{ fontSize: 16, fontWeight: "900" }}>{goalStartDateISO}</Text>
-            <Text style={{ marginTop: 4, opacity: 0.65 }}>Tap to open calendar</Text>
-          </Pressable>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+              <View>
+                <Text style={{ fontSize: 16, fontWeight: "900" }}>{formatDateLabel(goalDateISO)}</Text>
+                <Text style={{ marginTop: 4, opacity: 0.65 }}>Select your target completion date</Text>
+              </View>
+              <View
+                style={{
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                  borderRadius: 999,
+                  backgroundColor: "#f3f3f3",
+                }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: "800" }}>{goalDateISO}</Text>
+              </View>
+            </View>
 
-          <TextField
-            label="Goal start date (YYYY-MM-DD)"
-            value={goalStartDateISO}
-            onChangeText={setGoalStartDateISO}
-            placeholder="2026-01-01"
-          />
+            <View style={{ borderRadius: 14, overflow: "hidden", backgroundColor: "#fafafa" }}>
+              <DateTimePicker
+                value={dateFromISO(goalDateISO)}
+                mode="date"
+                display={Platform.OS === "ios" ? "inline" : "calendar"}
+                minimumDate={minGoalDate}
+                themeVariant="light"
+                onChange={(_, d) => {
+                  if (d) setGoalDateISO(isoFromDate(d));
+                }}
+              />
+            </View>
 
-          <Text style={{ marginTop: 14, fontWeight: "800" }}>Goal date</Text>
+            <TextField
+              label="Why is that date important? (optional)"
+              value={goalDateReason}
+              onChangeText={setGoalDateReason}
+              placeholder="e.g., My trip to Hawaii"
+            />
+          </View>
 
-          <Pressable
-            onPress={() => setShowGoalCalendar(true)}
-            style={{
-              marginTop: 8,
-              backgroundColor: "white",
-              borderRadius: 14,
-              borderWidth: 1,
-              borderColor: "#e6e6e6",
-              paddingVertical: 14,
-              paddingHorizontal: 12,
-            }}
-          >
-            <Text style={{ fontSize: 16, fontWeight: "900" }}>{goalDateISO}</Text>
-            <Text style={{ marginTop: 4, opacity: 0.65 }}>Tap to open calendar</Text>
-          </Pressable>
+          <View style={{ marginTop: 12, marginBottom: 6, flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Text style={{ fontWeight: "800" }}>Workouts by that date</Text>
+            <TextInput
+              value={targetWorkouts}
+              onChangeText={setTargetWorkouts}
+              placeholder="12"
+              keyboardType="number-pad"
+              style={{
+                minWidth: 64,
+                textAlign: "center",
+                backgroundColor: "white",
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: "#e6e6e6",
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                fontSize: 16,
+                fontWeight: "700",
+              }}
+            />
+          </View>
 
-          <TextField
-            label="Goal date (YYYY-MM-DD)"
-            value={goalDateISO}
-            onChangeText={setGoalDateISO}
-            placeholder="2026-01-15"
-          />
-
-          <TextField
-            label="Workouts by that date"
-            value={targetWorkouts}
-            onChangeText={setTargetWorkouts}
-            placeholder="e.g., 12"
-            keyboardType="number-pad"
-          />
-
-          <View style={{ marginTop: 6, marginBottom: 6 }}>
+          <View style={{ marginTop: 2, marginBottom: 6 }}>
             {workoutsPerDay !== null ? (
               <Text style={{ fontWeight: "800", color: workoutsPerDay > 1 ? "#b00020" : "#111" }}>
                 Workouts per day: {workoutsPerDay.toFixed(2)}
@@ -223,6 +280,23 @@ export default function GoalSetupScreen() {
           </View>
 
           <Button title="Save goal" onPress={save} />
+
+          <Pressable
+            onPress={() => setShowStartCalendar(true)}
+            style={{
+              marginTop: 12,
+              backgroundColor: "white",
+              borderRadius: 14,
+              borderWidth: 1,
+              borderColor: "#e6e6e6",
+              paddingVertical: 12,
+              paddingHorizontal: 12,
+              alignItems: "center",
+            }}
+          >
+            <Text style={{ fontSize: 14, fontWeight: "900" }}>Adjust goal start date</Text>
+            <Text style={{ marginTop: 4, opacity: 0.65 }}>{goalStartDateISO}</Text>
+          </Pressable>
         </Tile>
       </ScrollView>
 
@@ -234,19 +308,8 @@ export default function GoalSetupScreen() {
         onClose={() => setShowStartCalendar(false)}
         onSelect={(iso) => {
           setGoalStartDateISO(iso);
+          if (iso > goalDateISO) setGoalDateISO(iso);
           setShowStartCalendar(false);
-        }}
-      />
-
-      <DatePickerModal
-        visible={showGoalCalendar}
-        title="Select your goal date"
-        initialDateISO={goalDateISO}
-        minDateISO={goalStartDateISO}
-        onClose={() => setShowGoalCalendar(false)}
-        onSelect={(iso) => {
-          setGoalDateISO(iso);
-          setShowGoalCalendar(false);
         }}
       />
     </KeyboardAvoidingView>
