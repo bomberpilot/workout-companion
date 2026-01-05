@@ -256,19 +256,9 @@ async function notifyGroupWorkoutMembers(params: {
 
     if (memberIds.length === 0) return;
 
-    const settingsSnaps = await Promise.all(
-      memberIds.map((memberId) => getDoc(userSettingsDoc(memberId)))
-    );
-
     const batch = writeBatch(db);
-    const pushTokens = new Set<string>();
 
-    memberIds.forEach((memberId, index) => {
-      const settings = settingsSnaps[index].data() as
-        | { notificationsEnabled?: boolean; expoPushTokens?: string[] }
-        | undefined;
-      if (settings?.notificationsEnabled === false) return;
-
+    memberIds.forEach((memberId) => {
       const ref = doc(userNotificationsCol(memberId));
       batch.set(ref, {
         type: "group_workout",
@@ -281,25 +271,9 @@ async function notifyGroupWorkoutMembers(params: {
         read: false,
         createdAt: serverTimestamp(),
       });
-
-      (settings?.expoPushTokens ?? []).forEach((token) => {
-        if (token) pushTokens.add(token);
-      });
     });
 
     await batch.commit();
-
-    await sendExpoPushNotifications({
-      tokens: Array.from(pushTokens),
-      title: "Recent activity",
-      body: message,
-      data: {
-        type: "group_workout",
-        groupId: params.groupId,
-        workoutId: params.workoutId,
-        actorUserId: params.actorUserId,
-      },
-    });
   } catch (error) {
     console.warn("Notification fanout skipped:", error);
   }
