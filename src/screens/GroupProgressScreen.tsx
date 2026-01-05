@@ -39,7 +39,7 @@ function clamp01(x: number) {
 export default function GroupProgressScreen() {
   const { params } = useRoute<R>();
   const nav = useNavigation<Nav>();
-  const { user } = useAuth();
+  const { user, initializing } = useAuth();
   const [rows, setRows] = useState<Row[]>([]);
   const [goalRows, setGoalRows] = useState<GoalRow[]>([]);
   const [memberNames, setMemberNames] = useState<Record<string, string>>({});
@@ -90,6 +90,7 @@ export default function GroupProgressScreen() {
   }, [params.groupId, user]);
 
   useEffect(() => {
+    if (initializing || !user) return;
     const unsub = onSnapshot(
       groupMembersCol(params.groupId),
       (snap) => {
@@ -105,7 +106,7 @@ export default function GroupProgressScreen() {
       (err) => Alert.alert("Members error", err.message)
     );
     return unsub;
-  }, [params.groupId]);
+  }, [initializing, params.groupId, user]);
 
   useEffect(() => {
     if (!user) return;

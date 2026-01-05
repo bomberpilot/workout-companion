@@ -47,7 +47,7 @@ function fallbackName(uid: string) {
 export default function GroupChatScreen() {
   const { params } = useRoute<R>();
   const nav = useNavigation<Nav>();
-  const { user } = useAuth();
+  const { user, initializing } = useAuth();
   const headerHeight = useHeaderHeight();
 
   const [group, setGroup] = useState<GroupMeta>({});
@@ -88,6 +88,7 @@ export default function GroupChatScreen() {
 
   // Group meta
   useEffect(() => {
+    if (initializing || !user) return;
     const unsub = onSnapshot(
       groupDoc(params.groupId),
       (snap) => {
@@ -97,7 +98,7 @@ export default function GroupChatScreen() {
       (err) => Alert.alert("Group error", err.message)
     );
     return unsub;
-  }, [params.groupId]);
+  }, [initializing, params.groupId, user]);
 
   // Messages
   useEffect(() => {
@@ -133,6 +134,7 @@ export default function GroupChatScreen() {
 
   // Group member nicknames
   useEffect(() => {
+    if (initializing || !user) return;
     const unsub = onSnapshot(
       groupMembersCol(params.groupId),
       (snap) => {
@@ -148,7 +150,7 @@ export default function GroupChatScreen() {
       (err) => Alert.alert("Members error", err.message)
     );
     return unsub;
-  }, [params.groupId]);
+  }, [initializing, params.groupId, user]);
 
   // Resolve user display names lazily
   useEffect(() => {

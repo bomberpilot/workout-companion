@@ -26,7 +26,7 @@ type WorkoutRow = {
 
 export default function MemberProfileScreen() {
   const { params } = useRoute<R>();
-  const { user } = useAuth();
+  const { user, initializing } = useAuth();
   const [displayName, setDisplayName] = useState(params.userId.slice(0, 6));
   const [groupNickname, setGroupNickname] = useState<string | null>(null);
   const [target, setTarget] = useState<number | null>(null);
@@ -40,6 +40,7 @@ export default function MemberProfileScreen() {
   const isSelf = user?.uid === params.userId;
 
   useEffect(() => {
+    if (initializing || !user) return;
     const unsubProfile = onSnapshot(doc(db, "users", params.userId), (snap) => {
       const dn = (snap.data() as any)?.displayName;
       if (typeof dn === "string" && dn.trim().length) setDisplayName(dn.trim());
@@ -79,9 +80,10 @@ export default function MemberProfileScreen() {
       unsubGoal();
       unsubMember();
     };
-  }, [params.groupId, params.userId]);
+  }, [initializing, params.groupId, params.userId, user]);
 
   useEffect(() => {
+    if (initializing || !user) return;
     (async () => {
       try {
         const wQuery = query(userWorkoutsCol(params.userId), orderBy("createdAt", "desc"), limit(40));
@@ -99,7 +101,7 @@ export default function MemberProfileScreen() {
         Alert.alert("Workouts error", err?.message ?? "Unable to load workouts.");
       }
     })();
-  }, [params.userId]);
+  }, [initializing, params.userId, user]);
 
   const completed = workouts.length;
   const ratio = useMemo(() => (target ? Math.min(1, completed / target) : 0), [completed, target]);

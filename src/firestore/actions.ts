@@ -243,62 +243,66 @@ async function notifyGroupWorkoutMembers(params: {
   actorUserId: string;
   workoutId: string;
 }) {
-  const actorSnap = await getDoc(groupMemberDoc(params.groupId, params.actorUserId));
-  const actorNickname = ((actorSnap.data() as any)?.nickname ?? "").trim();
-  const actorName = actorNickname || "Someone";
-  const message = `${actorName} logged a workout! Check out your group's progress, and cheer them on!`;
+  try {
+    const actorSnap = await getDoc(groupMemberDoc(params.groupId, params.actorUserId));
+    const actorNickname = ((actorSnap.data() as any)?.nickname ?? "").trim();
+    const actorName = actorNickname || "Someone";
+    const message = `${actorName} logged a workout! Check out your group's progress, and cheer them on!`;
 
-  const membersSnap = await getDocs(groupMembersCol(params.groupId));
-  const memberIds = membersSnap.docs
-    .map((member) => member.id)
-    .filter((memberId) => memberId !== params.actorUserId);
+    const membersSnap = await getDocs(groupMembersCol(params.groupId));
+    const memberIds = membersSnap.docs
+      .map((member) => member.id)
+      .filter((memberId) => memberId !== params.actorUserId);
 
-  if (memberIds.length === 0) return;
+    if (memberIds.length === 0) return;
 
-  const settingsSnaps = await Promise.all(
-    memberIds.map((memberId) => getDoc(userSettingsDoc(memberId)))
-  );
+    const settingsSnaps = await Promise.all(
+      memberIds.map((memberId) => getDoc(userSettingsDoc(memberId)))
+    );
 
-  const batch = writeBatch(db);
-  const pushTokens = new Set<string>();
+    const batch = writeBatch(db);
+    const pushTokens = new Set<string>();
 
-  memberIds.forEach((memberId, index) => {
-    const settings = settingsSnaps[index].data() as
-      | { notificationsEnabled?: boolean; expoPushTokens?: string[] }
-      | undefined;
-    if (settings?.notificationsEnabled === false) return;
+    memberIds.forEach((memberId, index) => {
+      const settings = settingsSnaps[index].data() as
+        | { notificationsEnabled?: boolean; expoPushTokens?: string[] }
+        | undefined;
+      if (settings?.notificationsEnabled === false) return;
 
-    const ref = doc(userNotificationsCol(memberId));
-    batch.set(ref, {
-      type: "group_workout",
-      userId: memberId,
-      actorUserId: params.actorUserId,
-      actorName,
-      groupId: params.groupId,
-      workoutId: params.workoutId,
-      message,
-      read: false,
-      createdAt: serverTimestamp(),
+      const ref = doc(userNotificationsCol(memberId));
+      batch.set(ref, {
+        type: "group_workout",
+        userId: memberId,
+        actorUserId: params.actorUserId,
+        actorName,
+        groupId: params.groupId,
+        workoutId: params.workoutId,
+        message,
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+
+      (settings?.expoPushTokens ?? []).forEach((token) => {
+        if (token) pushTokens.add(token);
+      });
     });
 
-    (settings?.expoPushTokens ?? []).forEach((token) => {
-      if (token) pushTokens.add(token);
+    await batch.commit();
+
+    await sendExpoPushNotifications({
+      tokens: Array.from(pushTokens),
+      title: "Recent activity",
+      body: message,
+      data: {
+        type: "group_workout",
+        groupId: params.groupId,
+        workoutId: params.workoutId,
+        actorUserId: params.actorUserId,
+      },
     });
-  });
-
-  await batch.commit();
-
-  await sendExpoPushNotifications({
-    tokens: Array.from(pushTokens),
-    title: "Recent activity",
-    body: message,
-    data: {
-      type: "group_workout",
-      groupId: params.groupId,
-      workoutId: params.workoutId,
-      actorUserId: params.actorUserId,
-    },
-  });
+  } catch (error) {
+    console.warn("Notification fanout skipped:", error);
+  }
 }
 
 export async function logWorkoutToAllGroups(params: {
