@@ -70,21 +70,28 @@ export default function GroupChatScreen() {
           onPress={() => nav.navigate("GroupProgress", { groupId: params.groupId })}
           style={{ paddingHorizontal: 10, paddingVertical: 6 }}
         >
-          <Text style={{ fontWeight: "900" }}>Progress</Text>
+          <Text style={{ fontWeight: "900" }}>Group Progress</Text>
         </Pressable>
       ),
       headerRight: () => (
         <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <Pressable onPress={() => setShowLog(true)} style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
-            <Text style={{ fontWeight: "900" }}>Log</Text>
+          <Pressable
+            onPress={() => {
+              if (!user) return;
+              nav.navigate("MemberProfile", { groupId: params.groupId, userId: user.uid });
+            }}
+            disabled={!user}
+            style={{ paddingHorizontal: 10, paddingVertical: 6, opacity: user ? 1 : 0.5 }}
+          >
+            <Text style={{ fontWeight: "900" }}>👤 Profile</Text>
           </Pressable>
           <Pressable onPress={() => nav.navigate("Home")} style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
-            <Text style={{ fontWeight: "900" }}>Home</Text>
+            <Text style={{ fontWeight: "900" }}>🏠 Home</Text>
           </Pressable>
         </View>
       ),
     });
-  }, [nav, params.groupId, group?.name]);
+  }, [nav, params.groupId, group?.name, user]);
 
   // Group meta
   useEffect(() => {
@@ -274,7 +281,7 @@ export default function GroupChatScreen() {
           data={messagesWithDetails}
           inverted
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingBottom: 190 }}
+          contentContainerStyle={{ paddingBottom: 160 }}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           renderItem={({ item }) => {
@@ -295,7 +302,34 @@ export default function GroupChatScreen() {
           }}
         />
 
-        <ComposerBar onSendText={sendText} />
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "flex-end",
+            gap: 12,
+            paddingHorizontal: 12,
+            paddingBottom: 12,
+            backgroundColor: "#f6f6f6",
+          }}
+        >
+          <Pressable
+            onPress={() => setShowLog(true)}
+            style={{
+              backgroundColor: "#111",
+              borderRadius: 16,
+              paddingVertical: 14,
+              paddingHorizontal: 16,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Text style={{ color: "white", fontWeight: "900" }}>Log Workout</Text>
+          </Pressable>
+          <ComposerBar
+            onSendText={sendText}
+            containerStyle={{ flex: 1, padding: 0, backgroundColor: "transparent" }}
+          />
+        </View>
       </View>
 
       {user ? (
