@@ -11,6 +11,7 @@ import {
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { Ionicons } from "@expo/vector-icons";
 import {
   addDoc,
   doc,
@@ -29,6 +30,7 @@ import { groupDoc, groupMembersCol, messagesCol, userWorkoutDoc } from "../fires
 import MessageTile from "../components/chat/MessageTile";
 import ComposerBar from "../components/chat/ComposerBar";
 import LogWorkoutModal from "../components/workout/LogWorkoutModal";
+import { useTheme } from "../theme/ThemeProvider";
 
 type R = RouteProp<RootStackParamList, "Chat">;
 type Nav = NativeStackNavigationProp<RootStackParamList, "Chat">;
@@ -49,6 +51,7 @@ export default function GroupChatScreen() {
   const nav = useNavigation<Nav>();
   const { user, initializing } = useAuth();
   const headerHeight = useHeaderHeight();
+  const { colors } = useTheme();
 
   const [group, setGroup] = useState<GroupMeta>({});
   const [messages, setMessages] = useState<any[]>([]);
@@ -63,6 +66,10 @@ export default function GroupChatScreen() {
 
   // Header buttons
   useEffect(() => {
+    const isHomeActive = false;
+    const isProfileActive = false;
+    const inactiveColor = colors.text.secondary;
+    const activeColor = colors.accent.primary;
     nav.setOptions({
       headerTitle: group?.name?.trim()?.length ? group.name : "Group chat",
       headerLeft: () => (
@@ -81,17 +88,25 @@ export default function GroupChatScreen() {
               nav.navigate("MemberProfile", { groupId: params.groupId, userId: user.uid });
             }}
             disabled={!user}
-            style={{ paddingHorizontal: 10, paddingVertical: 6, opacity: user ? 1 : 0.5 }}
+            style={{ paddingHorizontal: 8, paddingVertical: 6, opacity: user ? 1 : 0.5 }}
           >
-            <Text style={{ fontWeight: "900" }}>👤 Profile</Text>
+            <Ionicons
+              name={isProfileActive ? "person" : "person-outline"}
+              size={24}
+              color={isProfileActive ? activeColor : inactiveColor}
+            />
           </Pressable>
-          <Pressable onPress={() => nav.navigate("Home")} style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
-            <Text style={{ fontWeight: "900" }}>🏠 Home</Text>
+          <Pressable onPress={() => nav.navigate("Home")} style={{ paddingHorizontal: 8, paddingVertical: 6 }}>
+            <Ionicons
+              name={isHomeActive ? "home" : "home-outline"}
+              size={24}
+              color={isHomeActive ? activeColor : inactiveColor}
+            />
           </Pressable>
         </View>
       ),
     });
-  }, [nav, params.groupId, group?.name, user]);
+  }, [nav, params.groupId, group?.name, user, colors]);
 
   // Group meta
   useEffect(() => {
@@ -281,7 +296,7 @@ export default function GroupChatScreen() {
           data={messagesWithDetails}
           inverted
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingBottom: 160 }}
+          contentContainerStyle={{ paddingBottom: 220 }}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           renderItem={({ item }) => {
@@ -304,31 +319,24 @@ export default function GroupChatScreen() {
 
         <View
           style={{
-            flexDirection: "row",
-            alignItems: "flex-end",
-            gap: 12,
             paddingHorizontal: 12,
             paddingBottom: 12,
             backgroundColor: "#f6f6f6",
           }}
         >
+          <ComposerBar onSendText={sendText} containerStyle={{ padding: 0, backgroundColor: "transparent" }} />
           <Pressable
             onPress={() => setShowLog(true)}
             style={{
               backgroundColor: "#111",
-              borderRadius: 16,
-              paddingVertical: 14,
-              paddingHorizontal: 16,
+              borderRadius: 18,
+              paddingVertical: 16,
               alignItems: "center",
-              justifyContent: "center",
+              marginTop: 10,
             }}
           >
-            <Text style={{ color: "white", fontWeight: "900" }}>Log Workout</Text>
+            <Text style={{ color: "white", fontWeight: "900", fontSize: 16 }}>Log workout</Text>
           </Pressable>
-          <ComposerBar
-            onSendText={sendText}
-            containerStyle={{ flex: 1, padding: 0, backgroundColor: "transparent" }}
-          />
         </View>
       </View>
 

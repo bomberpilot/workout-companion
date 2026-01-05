@@ -10,6 +10,7 @@
     "zip": "powershell -Command \"Compress-Archive -Path . -DestinationPath code_$((Get-Date).ToString('yyyyMMdd_HHmm')).zip -CompressionLevel NoCompression -Exclude node_modules,.git,.expo,dist,build\""
   },
   "dependencies": {
+    "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
     "@react-navigation/elements": "^2.9.3",
