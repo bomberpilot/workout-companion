@@ -87,5 +87,6 @@ export type AppNotification = {
 
 export type UserSettings = {
   notificationsEnabled: boolean;
+  expoPushTokens?: string[];
   updatedAt?: Timestamp;
 };

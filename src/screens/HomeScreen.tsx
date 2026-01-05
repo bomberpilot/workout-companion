@@ -13,7 +13,6 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
-  where,
   writeBatch,
 } from "firebase/firestore";
 
@@ -154,9 +153,8 @@ export default function HomeScreen() {
 
     const qy = query(
       userNotificationsCol(user.uid),
-      where("read", "==", false),
       orderBy("createdAt", "desc"),
-      limit(5)
+      limit(10)
     );
     const unsub = onSnapshot(
       qy,
@@ -165,7 +163,7 @@ export default function HomeScreen() {
           id: docSnap.id,
           ...(docSnap.data() as Omit<AppNotification, "id">),
         }));
-        setNotifications(next);
+        setNotifications(next.filter((notification) => !notification.read));
       },
       () => setNotifications([])
     );
@@ -296,7 +294,7 @@ export default function HomeScreen() {
 
       <View style={{ paddingHorizontal: sidePadding, paddingTop: 16 }}>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-          <Text style={{ fontSize: 18, fontWeight: "900" }}>Notifications</Text>
+          <Text style={{ fontSize: 18, fontWeight: "900" }}>Recent Activity</Text>
           <Pressable
             onPress={dismissAllNotifications}
             disabled={!notifications.length || !notificationsEnabled}
@@ -337,7 +335,7 @@ export default function HomeScreen() {
             })}
           </View>
         ) : (
-          <Text style={{ marginTop: 8, opacity: 0.6 }}>No notifications yet.</Text>
+          <Text style={{ marginTop: 8, opacity: 0.6 }}>You’re all caught up!</Text>
         )}
       </View>
 

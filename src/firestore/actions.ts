@@ -61,6 +61,34 @@ function makeInviteCode(len = 6) {
   return out;
 }
 
+async function sendExpoPushNotifications(params: {
+  tokens: string[];
+  title: string;
+  body: string;
+  data?: Record<string, string>;
+}) {
+  if (params.tokens.length === 0) return;
+  try {
+    await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(
+        params.tokens.map((token) => ({
+          to: token,
+          title: params.title,
+          body: params.body,
+          data: params.data,
+        }))
+      ),
+    });
+  } catch {
+    // non-fatal
+  }
+}
+
 export async function ensureUserProfileDoc(params: { userId: string; email?: string }) {
   const ref = doc(db, "users", params.userId);
   const snap = await getDoc(ref);
@@ -232,9 +260,12 @@ async function notifyGroupWorkoutMembers(params: {
   );
 
   const batch = writeBatch(db);
+  const pushTokens = new Set<string>();
 
   memberIds.forEach((memberId, index) => {
-    const settings = settingsSnaps[index].data() as { notificationsEnabled?: boolean } | undefined;
+    const settings = settingsSnaps[index].data() as
+      | { notificationsEnabled?: boolean; expoPushTokens?: string[] }
+      | undefined;
     if (settings?.notificationsEnabled === false) return;
 
     const ref = doc(userNotificationsCol(memberId));
@@ -249,9 +280,25 @@ async function notifyGroupWorkoutMembers(params: {
       read: false,
       createdAt: serverTimestamp(),
     });
+
+    (settings?.expoPushTokens ?? []).forEach((token) => {
+      if (token) pushTokens.add(token);
+    });
   });
 
   await batch.commit();
+
+  await sendExpoPushNotifications({
+    tokens: Array.from(pushTokens),
+    title: "Recent activity",
+    body: message,
+    data: {
+      type: "group_workout",
+      groupId: params.groupId,
+      workoutId: params.workoutId,
+      actorUserId: params.actorUserId,
+    },
+  });
 }
 
 export async function logWorkoutToAllGroups(params: {
@@ -333,8 +380,8 @@ export async function logWorkoutFromGroupChat(params: {
     userId: params.userId,
     workoutId: w.workoutId,
     workoutDate: w.date,
-    activityTypes: w.activityTypes,
-    durationMinutes: w.durationMinutes,
+    activityTypes: params.activityTypes,
+    durationMinutes: params.durationMinutes,
     groupNote: params.groupNote ?? params.notes ?? "",
   });
 

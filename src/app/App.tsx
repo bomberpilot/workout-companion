@@ -4,6 +4,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import AuthProvider from "../auth/AuthProvider";
 import RootNavigator from "../navigation/RootNavigator";
+import PushNotificationManager from "../notifications/PushNotificationManager";
 import { ThemeProvider, useTheme } from "../theme/ThemeProvider";
 import { toNavigationTheme } from "../theme/navigationTheme";
 
@@ -21,6 +22,7 @@ export default function App() {
     <SafeAreaProvider>
       <ThemeProvider>
         <AuthProvider>
+          <PushNotificationManager />
           <AppNav />
         </AuthProvider>
       </ThemeProvider>
