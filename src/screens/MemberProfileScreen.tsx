@@ -134,11 +134,11 @@ export default function MemberProfileScreen() {
     setShowWorkoutEditor(true);
   }
 
-  function openGoalMenu() {
+  function openGoalMenu(goalId?: string) {
     Alert.alert("Goal options", "Choose an action", [
       {
         text: "Edit goal",
-        onPress: () => nav.navigate("GoalEdit", { groupId: params.groupId, userId: params.userId }),
+        onPress: () => nav.navigate("GoalEdit", { groupId: params.groupId, userId: params.userId, goalId }),
       },
       { text: "Cancel", style: "cancel" },
     ]);
@@ -286,7 +286,7 @@ export default function MemberProfileScreen() {
                       goal,
                       isSelf,
                       onLongPress: () => startGoalDrag(goal),
-                      onMenuPress: openGoalMenu,
+                      onMenuPress: () => openGoalMenu(goal.id),
                     })}
                   </View>
                 );
@@ -312,7 +312,7 @@ export default function MemberProfileScreen() {
                     goal: draggingGoal,
                     isSelf,
                     onLongPress: () => {},
-                    onMenuPress: openGoalMenu,
+                    onMenuPress: () => openGoalMenu(draggingGoal.id),
                   })}
                 </View>
               ) : null}

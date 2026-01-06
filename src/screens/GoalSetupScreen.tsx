@@ -161,15 +161,62 @@ export default function GoalSetupScreen() {
       // non-fatal
     }
 
+    const goalRef = doc(db, "groups", params.groupId, "goals", user.uid);
+    let existingGoalEntries: any[] | null = null;
+    let hasExistingGoal = false;
+    try {
+      const existingSnap = await getDoc(goalRef);
+      if (existingSnap.exists()) {
+        const existingData = existingSnap.data() as any;
+        if (Array.isArray(existingData?.goalEntries)) {
+          existingGoalEntries = existingData.goalEntries;
+        } else if (
+          typeof existingData?.targetWorkouts === "number" ||
+          typeof existingData?.targetValue === "number" ||
+          typeof existingData?.goalDateISO === "string"
+        ) {
+          hasExistingGoal = true;
+          existingGoalEntries = [
+            {
+              id: `legacy-${user.uid}`,
+              targetWorkouts: Number(existingData?.targetWorkouts ?? existingData?.targetValue ?? 0) || 0,
+              completedWorkouts: Number(existingData?.completedWorkouts ?? 0) || 0,
+              goalDateISO: existingData?.goalDateISO ?? null,
+              goalStartDateISO: existingData?.goalStartDateISO ?? null,
+              goalDateReason: existingData?.goalDateReason ?? "",
+            },
+          ];
+        }
+      }
+    } catch {
+      // non-fatal
+    }
+
+    const newGoalEntry = {
+      id: `goal-${Date.now()}`,
+      targetWorkouts: targetNum,
+      completedWorkouts: 0,
+      goalDateISO: iso,
+      goalStartDateISO: startIso,
+      goalDateReason: goalDateReason.trim(),
+    };
+
+    const goalEntries = existingGoalEntries ? [...existingGoalEntries, newGoalEntry] : [newGoalEntry];
+
     await setDoc(
-      doc(db, "groups", params.groupId, "goals", user.uid),
+      goalRef,
       {
         displayName,
-        targetWorkouts: targetNum,
-        goalDateISO: iso,
-        goalStartDateISO: startIso,
-        goalDateReason: goalDateReason.trim(),
-        completedWorkouts: 0,
+        goalEntries,
+        ...(hasExistingGoal
+          ? {}
+          : {
+              targetWorkouts: targetNum,
+              goalDateISO: iso,
+              goalStartDateISO: startIso,
+              goalDateReason: goalDateReason.trim(),
+              completedWorkouts: 0,
+            }),
         updatedAt: serverTimestamp(),
         createdAt: serverTimestamp(),
       },

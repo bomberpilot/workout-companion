@@ -27,6 +27,15 @@ import DatePickerModal from "../components/ui/DatePickerModal";
 type R = RouteProp<RootStackParamList, "GoalEdit">;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
+type GoalEntry = {
+  id: string;
+  targetWorkouts: number;
+  completedWorkouts?: number;
+  goalDateISO?: string | null;
+  goalStartDateISO?: string | null;
+  goalDateReason?: string | null;
+};
+
 function todayISO() {
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -106,6 +115,8 @@ export default function GoalEditScreen() {
   const [goalDateReason, setGoalDateReason] = useState("");
   const [showStartCalendar, setShowStartCalendar] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [goalEntries, setGoalEntries] = useState<GoalEntry[] | null>(null);
+  const [goalIndex, setGoalIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -115,6 +126,24 @@ export default function GoalEditScreen() {
         const snap = await getDoc(doc(db, "groups", params.groupId, "goals", params.userId));
         if (!snap.exists() || !active) return;
         const data = snap.data() as any;
+        if (Array.isArray(data?.goalEntries)) {
+          const entries: GoalEntry[] = data.goalEntries;
+          const index = params.goalId
+            ? entries.findIndex((entry) => entry.id === params.goalId)
+            : 0;
+          const resolvedIndex = index >= 0 ? index : 0;
+          const entry = entries[resolvedIndex];
+          setGoalEntries(entries);
+          setGoalIndex(resolvedIndex);
+          if (entry) {
+            if (typeof entry.targetWorkouts === "number") setTargetWorkouts(String(entry.targetWorkouts));
+            if (typeof entry.goalDateISO === "string") setGoalDateISO(entry.goalDateISO);
+            if (typeof entry.goalStartDateISO === "string") setGoalStartDateISO(entry.goalStartDateISO);
+            if (typeof entry.goalDateReason === "string") setGoalDateReason(entry.goalDateReason);
+          }
+          return;
+        }
+
         const target = Number(data?.targetWorkouts ?? data?.targetValue ?? 0) || 0;
         if (target > 0) setTargetWorkouts(String(target));
         if (typeof data?.goalDateISO === "string") setGoalDateISO(data.goalDateISO);
@@ -128,7 +157,7 @@ export default function GoalEditScreen() {
     return () => {
       active = false;
     };
-  }, [params.groupId, params.userId, user]);
+  }, [params.goalId, params.groupId, params.userId, user]);
 
   const targetNum = useMemo(() => {
     const n = Number(targetWorkouts);
@@ -166,21 +195,101 @@ export default function GoalEditScreen() {
 
     setSaving(true);
     try {
-      await setDoc(
-        doc(db, "groups", params.groupId, "goals", params.userId),
-        {
-          targetWorkouts: targetNum,
-          goalDateISO: iso,
-          goalStartDateISO: startIso,
-          goalDateReason: goalDateReason.trim(),
+      const goalRef = doc(db, "groups", params.groupId, "goals", params.userId);
+      if (goalEntries && goalIndex !== null) {
+        const nextEntries = goalEntries.map((entry, idx) =>
+          idx === goalIndex
+            ? {
+                ...entry,
+                targetWorkouts: targetNum,
+                goalDateISO: iso,
+                goalStartDateISO: startIso,
+                goalDateReason: goalDateReason.trim(),
+              }
+            : entry
+        );
+        const patch: Record<string, any> = {
+          goalEntries: nextEntries,
           updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+        };
+        if (goalIndex === 0) {
+          patch.targetWorkouts = targetNum;
+          patch.goalDateISO = iso;
+          patch.goalStartDateISO = startIso;
+          patch.goalDateReason = goalDateReason.trim();
+        }
+        await setDoc(goalRef, patch, { merge: true });
+      } else {
+        await setDoc(
+          goalRef,
+          {
+            targetWorkouts: targetNum,
+            goalDateISO: iso,
+            goalStartDateISO: startIso,
+            goalDateReason: goalDateReason.trim(),
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
       Alert.alert("Saved", "Your goal was updated.");
       nav.goBack();
     } catch (err: any) {
       Alert.alert("Goal error", err?.message ?? "Unable to update goal.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function confirmDelete() {
+    Alert.alert("Delete goal?", "This will remove the goal from this group.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: deleteGoal },
+    ]);
+  }
+
+  async function deleteGoal() {
+    if (!user) return;
+    setSaving(true);
+    try {
+      const goalRef = doc(db, "groups", params.groupId, "goals", params.userId);
+      if (goalEntries && goalIndex !== null) {
+        const nextEntries = goalEntries.filter((_, idx) => idx !== goalIndex);
+        const patch: Record<string, any> = {
+          goalEntries: nextEntries,
+          updatedAt: serverTimestamp(),
+        };
+        if (nextEntries.length > 0) {
+          const primary = nextEntries[0];
+          patch.targetWorkouts = primary?.targetWorkouts ?? null;
+          patch.goalDateISO = primary?.goalDateISO ?? null;
+          patch.goalStartDateISO = primary?.goalStartDateISO ?? null;
+          patch.goalDateReason = primary?.goalDateReason ?? "";
+        } else {
+          patch.targetWorkouts = null;
+          patch.goalDateISO = null;
+          patch.goalStartDateISO = null;
+          patch.goalDateReason = "";
+          patch.completedWorkouts = 0;
+        }
+        await setDoc(goalRef, patch, { merge: true });
+      } else {
+        await setDoc(
+          goalRef,
+          {
+            targetWorkouts: null,
+            goalDateISO: null,
+            goalStartDateISO: null,
+            goalDateReason: "",
+            completedWorkouts: 0,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
+      nav.goBack();
+    } catch (err: any) {
+      Alert.alert("Delete goal", err?.message ?? "Unable to delete this goal.");
     } finally {
       setSaving(false);
     }
@@ -305,6 +414,10 @@ export default function GoalEditScreen() {
             <Text style={{ fontSize: 14, fontWeight: "900" }}>Adjust goal start date</Text>
             <Text style={{ marginTop: 4, opacity: 0.65 }}>{goalStartDateISO}</Text>
           </Pressable>
+
+          <View style={{ marginTop: 12 }}>
+            <Button title="Delete goal" onPress={confirmDelete} disabled={saving} />
+          </View>
         </Tile>
       </ScrollView>
 
