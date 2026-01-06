@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, FlatList, Dimensions, Pressable, Alert, NativeSyntheticEvent, NativeScrollEvent } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { Ionicons } from "@expo/vector-icons";
 import {
   collection,
   doc,
@@ -29,6 +30,7 @@ import LogWorkoutModal from "../components/workout/LogWorkoutModal";
 import GoalTile from "../components/home/GoalTile";
 import { db } from "../config/firebase";
 import type { AppNotification, UserSettings } from "../types/models";
+import { useTheme } from "../theme/ThemeProvider";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "Home">;
 
@@ -43,6 +45,7 @@ type GoalCard = {
 export default function HomeScreen() {
   const nav = useNavigation<Nav>();
   const { user } = useAuth();
+  const { colors } = useTheme();
 
   const [cards, setCards] = useState<GoalCard[]>([]);
   const [showLog, setShowLog] = useState(false);
@@ -225,7 +228,7 @@ export default function HomeScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: "#f6f6f6" }}>
       <View style={{ padding: sidePadding, paddingBottom: 8 }}>
-        <Text style={{ fontSize: 22, fontWeight: "900" }}>Your goals</Text>
+        <Text style={{ fontSize: 22, fontWeight: "900" }}>Your Groups</Text>
         <Text style={{ opacity: 0.7, marginTop: 4 }}>Scroll sideways. Tap a tile to enter the group.</Text>
       </View>
 
@@ -355,7 +358,7 @@ export default function HomeScreen() {
           <Text style={{ color: "white", opacity: 0.75, marginTop: 4 }}>Posts to every group</Text>
         </Pressable>
 
-        <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+        <View style={{ flexDirection: "row", gap: 10, marginTop: 10, alignItems: "center" }}>
           <Pressable
             onPress={() => nav.navigate("CreateGroup")}
             style={{
@@ -385,37 +388,19 @@ export default function HomeScreen() {
           >
             <Text style={{ fontWeight: "800" }}>Join group</Text>
           </Pressable>
-        </View>
 
-        <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
           <Pressable
             onPress={() => nav.navigate("Profile")}
-            style={{
-              flex: 1,
-              backgroundColor: "white",
-              borderRadius: 16,
-              paddingVertical: 14,
-              alignItems: "center",
-              borderWidth: 1,
-              borderColor: "#e6e6e6",
-            }}
+            style={{ paddingHorizontal: 8, paddingVertical: 8 }}
           >
-            <Text style={{ fontWeight: "800" }}>Profile</Text>
+            <Ionicons name="person-outline" size={24} color={colors.text.secondary} />
           </Pressable>
 
           <Pressable
             onPress={() => nav.navigate("Settings")}
-            style={{
-              flex: 1,
-              backgroundColor: "white",
-              borderRadius: 16,
-              paddingVertical: 14,
-              alignItems: "center",
-              borderWidth: 1,
-              borderColor: "#e6e6e6",
-            }}
+            style={{ paddingHorizontal: 8, paddingVertical: 8 }}
           >
-            <Text style={{ fontWeight: "800" }}>Settings</Text>
+            <Ionicons name="settings-outline" size={24} color={colors.text.secondary} />
           </Pressable>
         </View>
       </View>
