@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -24,7 +24,7 @@ import TextField from "../components/ui/TextField";
 import Button from "../components/ui/Button";
 import DatePickerModal from "../components/ui/DatePickerModal";
 
-type R = RouteProp<RootStackParamList, "GoalSetup">;
+type R = RouteProp<RootStackParamList, "GoalEdit">;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 function todayISO() {
@@ -93,7 +93,7 @@ function formatDateLabel(iso: string) {
   });
 }
 
-export default function GoalSetupScreen() {
+export default function GoalEditScreen() {
   const { params } = useRoute<R>();
   const nav = useNavigation<Nav>();
   const headerHeight = useHeaderHeight();
@@ -105,6 +105,30 @@ export default function GoalSetupScreen() {
   const [goalStartDateISO, setGoalStartDateISO] = useState<string>(todayISO());
   const [goalDateReason, setGoalDateReason] = useState("");
   const [showStartCalendar, setShowStartCalendar] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, "groups", params.groupId, "goals", params.userId));
+        if (!snap.exists() || !active) return;
+        const data = snap.data() as any;
+        const target = Number(data?.targetWorkouts ?? data?.targetValue ?? 0) || 0;
+        if (target > 0) setTargetWorkouts(String(target));
+        if (typeof data?.goalDateISO === "string") setGoalDateISO(data.goalDateISO);
+        if (typeof data?.goalStartDateISO === "string") setGoalStartDateISO(data.goalStartDateISO);
+        if (typeof data?.goalDateReason === "string") setGoalDateReason(data.goalDateReason);
+      } catch (err: any) {
+        Alert.alert("Goal error", err?.message ?? "Unable to load this goal.");
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [params.groupId, params.userId, user]);
 
   const targetNum = useMemo(() => {
     const n = Number(targetWorkouts);
@@ -140,43 +164,26 @@ export default function GoalSetupScreen() {
       return Alert.alert("Goal dates", "Start date must be on or before the goal date.");
     }
 
-    // Pull your own displayName so progress doesn't need cross-user reads
-    let displayName = "";
-    try {
-      const snap = await getDoc(doc(db, "users", user.uid));
-      displayName = String((snap.data() as any)?.displayName ?? "").trim();
-    } catch {
-      // non-fatal
-    }
-    if (!displayName) displayName = user.uid.slice(0, 6);
-
-    // Ensure membership exists before writing goals
+    setSaving(true);
     try {
       await setDoc(
-        doc(db, "groups", params.groupId, "members", user.uid),
-        { userId: user.uid, joinDate: serverTimestamp() },
+        doc(db, "groups", params.groupId, "goals", params.userId),
+        {
+          targetWorkouts: targetNum,
+          goalDateISO: iso,
+          goalStartDateISO: startIso,
+          goalDateReason: goalDateReason.trim(),
+          updatedAt: serverTimestamp(),
+        },
         { merge: true }
       );
-    } catch {
-      // non-fatal
+      Alert.alert("Saved", "Your goal was updated.");
+      nav.goBack();
+    } catch (err: any) {
+      Alert.alert("Goal error", err?.message ?? "Unable to update goal.");
+    } finally {
+      setSaving(false);
     }
-
-    await setDoc(
-      doc(db, "groups", params.groupId, "goals", user.uid),
-      {
-        displayName,
-        targetWorkouts: targetNum,
-        goalDateISO: iso,
-        goalStartDateISO: startIso,
-        goalDateReason: goalDateReason.trim(),
-        completedWorkouts: 0,
-        updatedAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
-
-    nav.navigate("Chat", { groupId: params.groupId });
   }
 
   return (
@@ -192,9 +199,9 @@ export default function GoalSetupScreen() {
         automaticallyAdjustKeyboardInsets
       >
         <Tile>
-          <Text style={{ fontSize: 20, fontWeight: "900" }}>Set your goal</Text>
+          <Text style={{ fontSize: 20, fontWeight: "900" }}>Edit your goal</Text>
           <Text style={{ opacity: 0.7, marginTop: 6 }}>
-            Pick a goal date first, then choose how many workouts you want by then.
+            Update your target date, start date, and total workouts for this group.
           </Text>
 
           <Text style={{ marginTop: 18, fontWeight: "800" }}>Goal date</Text>
@@ -213,7 +220,7 @@ export default function GoalSetupScreen() {
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
               <View>
                 <Text style={{ fontSize: 16, fontWeight: "900" }}>{formatDateLabel(goalDateISO)}</Text>
-                <Text style={{ marginTop: 4, opacity: 0.65 }}>Select your target completion date</Text>
+                <Text style={{ marginTop: 4, opacity: 0.65 }}>Select your updated target date</Text>
               </View>
               <View
                 style={{
@@ -280,7 +287,7 @@ export default function GoalSetupScreen() {
             )}
           </View>
 
-          <Button title="Save goal" onPress={save} />
+          <Button title={saving ? "Saving…" : "Save goal"} onPress={save} disabled={saving} />
 
           <Pressable
             onPress={() => setShowStartCalendar(true)}

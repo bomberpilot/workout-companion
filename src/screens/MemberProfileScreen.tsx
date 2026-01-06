@@ -1,20 +1,31 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Alert, FlatList, Text, View } from "react-native";
-import { RouteProp, useRoute } from "@react-navigation/native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, FlatList, PanResponder, Pressable, Text, View } from "react-native";
+import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc } from "firebase/firestore";
 
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { useAuth } from "../auth/useAuth";
 import { db } from "../config/firebase";
 import Tile from "../components/ui/Tile";
-import TextField from "../components/ui/TextField";
 import Button from "../components/ui/Button";
-import DatePickerModal from "../components/ui/DatePickerModal";
+import EditWorkoutModal from "../components/workout/EditWorkoutModal";
 import { groupMemberDoc, userWorkoutsCol } from "../firestore/paths";
 
 type R = RouteProp<RootStackParamList, "MemberProfile">;
+type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+type GoalEntry = {
+  id: string;
+  targetWorkouts: number;
+  completedWorkouts: number;
+  goalDateISO?: string;
+  goalStartDateISO?: string;
+  goalDateReason?: string;
+};
 
 type WorkoutRow = {
+  id: string;
   activityTypes?: string[];
   durationMinutes?: number;
   date?: any;
@@ -26,17 +37,19 @@ type WorkoutRow = {
 
 export default function MemberProfileScreen() {
   const { params } = useRoute<R>();
+  const nav = useNavigation<Nav>();
   const { user, initializing } = useAuth();
   const [displayName, setDisplayName] = useState(params.userId.slice(0, 6));
   const [groupNickname, setGroupNickname] = useState<string | null>(null);
-  const [target, setTarget] = useState<number | null>(null);
+  const [goals, setGoals] = useState<GoalEntry[]>([]);
   const [workouts, setWorkouts] = useState<WorkoutRow[]>([]);
-  const [goalDateISO, setGoalDateISO] = useState<string>(todayISO());
-  const [goalStartDateISO, setGoalStartDateISO] = useState<string>(todayISO());
-  const [targetWorkouts, setTargetWorkouts] = useState("0");
-  const [showGoalCalendar, setShowGoalCalendar] = useState(false);
-  const [showStartCalendar, setShowStartCalendar] = useState(false);
-  const [savingGoal, setSavingGoal] = useState(false);
+  const [editingWorkout, setEditingWorkout] = useState<WorkoutRow | null>(null);
+  const [showWorkoutEditor, setShowWorkoutEditor] = useState(false);
+  const [draggingGoalId, setDraggingGoalId] = useState<string | null>(null);
+  const [goalContainerHeight, setGoalContainerHeight] = useState(0);
+  const dragStartOffset = useRef(0);
+  const dragPosition = useRef(0);
+  const goalLayouts = useRef<Record<string, { y: number; height: number }>>({});
   const isSelf = user?.uid === params.userId;
 
   useEffect(() => {
@@ -47,22 +60,32 @@ export default function MemberProfileScreen() {
     });
 
     const unsubGoal = onSnapshot(doc(db, "groups", params.groupId, "goals", params.userId), (snap) => {
+      if (!snap.exists()) {
+        setGoals([]);
+        return;
+      }
       const g = snap.data() as any;
-      if (typeof g?.targetWorkouts === "number") {
-        setTarget(g.targetWorkouts);
-        setTargetWorkouts(String(g.targetWorkouts));
-      } else if (typeof g?.targetValue === "number") {
-        setTarget(g.targetValue);
-        setTargetWorkouts(String(g.targetValue));
+      if (Array.isArray(g?.goalEntries)) {
+        const entries = g.goalEntries.map((entry: any, idx: number) => ({
+          id: entry?.id ?? `${snap.id}-${idx}`,
+          targetWorkouts: Number(entry?.targetWorkouts ?? entry?.targetValue ?? 0) || 0,
+          completedWorkouts: Number(entry?.completedWorkouts ?? 0) || 0,
+          goalDateISO: typeof entry?.goalDateISO === "string" ? entry.goalDateISO : undefined,
+          goalStartDateISO: typeof entry?.goalStartDateISO === "string" ? entry.goalStartDateISO : undefined,
+          goalDateReason: typeof entry?.goalDateReason === "string" ? entry.goalDateReason : undefined,
+        }));
+        setGoals(entries);
       } else {
-        setTarget(null);
-        setTargetWorkouts("0");
-      }
-      if (typeof g?.goalDateISO === "string") {
-        setGoalDateISO(g.goalDateISO);
-      }
-      if (typeof g?.goalStartDateISO === "string") {
-        setGoalStartDateISO(g.goalStartDateISO);
+        setGoals([
+          {
+            id: snap.id,
+            targetWorkouts: Number(g?.targetWorkouts ?? g?.targetValue ?? 0) || 0,
+            completedWorkouts: Number(g?.completedWorkouts ?? 0) || 0,
+            goalDateISO: typeof g?.goalDateISO === "string" ? g.goalDateISO : undefined,
+            goalStartDateISO: typeof g?.goalStartDateISO === "string" ? g.goalStartDateISO : undefined,
+            goalDateReason: typeof g?.goalDateReason === "string" ? g.goalDateReason : undefined,
+          },
+        ]);
       }
     });
 
@@ -88,137 +111,238 @@ export default function MemberProfileScreen() {
       try {
         const wQuery = query(userWorkoutsCol(params.userId), orderBy("createdAt", "desc"), limit(40));
         const wSnap = await getDocs(wQuery);
-        const rows = wSnap.docs.map((d) => d.data() as WorkoutRow);
+        const rows = wSnap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<WorkoutRow, "id">),
+        }));
 
-        rows.sort((a, b) => {
-          const ta = getWorkoutTime(a);
-          const tb = getWorkoutTime(b);
-          return tb - ta;
-        });
-
-        setWorkouts(rows);
+        setWorkouts(sortWorkouts(rows));
       } catch (err: any) {
         Alert.alert("Workouts error", err?.message ?? "Unable to load workouts.");
       }
     })();
   }, [initializing, params.userId, user]);
 
-  const completed = workouts.length;
-  const ratio = useMemo(() => (target ? Math.min(1, completed / target) : 0), [completed, target]);
-  const targetNum = useMemo(() => {
-    const n = Number(targetWorkouts);
-    return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
-  }, [targetWorkouts]);
+  const goalTitle = groupNickname ?? displayName;
+  const draggingGoal = useMemo(
+    () => (draggingGoalId ? goals.find((goal) => goal.id === draggingGoalId) ?? null : null),
+    [draggingGoalId, goals]
+  );
 
-  async function saveGoal() {
+  function openWorkoutEditor(item: WorkoutRow) {
+    setEditingWorkout(item);
+    setShowWorkoutEditor(true);
+  }
+
+  function openGoalMenu() {
+    Alert.alert("Goal options", "Choose an action", [
+      {
+        text: "Edit goal",
+        onPress: () => nav.navigate("GoalEdit", { groupId: params.groupId, userId: params.userId }),
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }
+
+  function openWorkoutMenu(item: WorkoutRow) {
+    Alert.alert("Workout options", "Choose an action", [
+      { text: "Edit workout", onPress: () => openWorkoutEditor(item) },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }
+
+  function handleWorkoutSaved(updated: WorkoutRow) {
+    setWorkouts((prev) => {
+      const next = prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item));
+      return sortWorkouts(next);
+    });
+  }
+
+  function getGoalIndex(id: string) {
+    return goals.findIndex((goal) => goal.id === id);
+  }
+
+  async function persistGoalOrder(nextGoals: GoalEntry[]) {
     if (!user || !isSelf) return;
-    if (targetNum < 1) {
-      return Alert.alert("Goal", "Set a target workouts number (at least 1).");
-    }
-
-    const iso = goalDateISO.trim();
-    const startIso = goalStartDateISO.trim();
-
-    if (!isValidISO(startIso)) return Alert.alert("Goal start date", "Use format YYYY-MM-DD.");
-    if (!isValidISO(iso)) return Alert.alert("Goal date", "Use format YYYY-MM-DD.");
-
-    if (startIso > iso) {
-      return Alert.alert("Goal dates", "Start date must be on or before the goal date.");
-    }
-
-    setSavingGoal(true);
     try {
       await setDoc(
         doc(db, "groups", params.groupId, "goals", params.userId),
         {
-          targetWorkouts: targetNum,
-          goalDateISO: iso,
-          goalStartDateISO: startIso,
+          goalEntries: nextGoals.map((goal) => ({
+            id: goal.id,
+            targetWorkouts: goal.targetWorkouts,
+            completedWorkouts: goal.completedWorkouts,
+            goalDateISO: goal.goalDateISO ?? null,
+            goalStartDateISO: goal.goalStartDateISO ?? null,
+            goalDateReason: goal.goalDateReason ?? "",
+          })),
           updatedAt: serverTimestamp(),
         },
         { merge: true }
       );
-      Alert.alert("Saved", "Your goal was updated.");
     } catch (err: any) {
-      Alert.alert("Goal error", err?.message ?? "Unable to update goal.");
-    } finally {
-      setSavingGoal(false);
+      Alert.alert("Goal order", err?.message ?? "Unable to save your goal order.");
     }
   }
+
+  function startGoalDrag(goal: GoalEntry) {
+    if (!isSelf || goals.length < 2) return;
+    const layout = goalLayouts.current[goal.id];
+    if (!layout) return;
+    setDraggingGoalId(goal.id);
+    dragStartOffset.current = layout.y;
+    dragPosition.current = layout.y;
+  }
+
+  function handleGoalMove(dy: number) {
+    if (!draggingGoalId) return;
+    const currentIndex = getGoalIndex(draggingGoalId);
+    if (currentIndex === -1) return;
+
+    const start = dragStartOffset.current;
+    const nextPosition = start + dy;
+    dragPosition.current = Math.max(0, Math.min(nextPosition, Math.max(0, goalContainerHeight - 1)));
+
+    const nextIndex = getGoalIndexForPosition(draggingGoalId, dragPosition.current);
+    if (nextIndex === -1 || nextIndex === currentIndex) return;
+
+    setGoals((prev) => moveArrayItem(prev, currentIndex, nextIndex));
+  }
+
+  function finishGoalDrag() {
+    if (!draggingGoalId) return;
+    const nextGoals = [...goals];
+    setDraggingGoalId(null);
+    persistGoalOrder(nextGoals);
+  }
+
+  function getGoalIndexForPosition(goalId: string, positionY: number) {
+    const entries = Object.entries(goalLayouts.current).filter(([id]) =>
+      goals.some((goal) => goal.id === id)
+    );
+    if (entries.length === 0) return -1;
+    const sorted = entries.sort((a, b) => a[1].y - b[1].y);
+    for (let i = 0; i < sorted.length; i += 1) {
+      const [, layout] = sorted[i];
+      const center = layout.y + layout.height / 2;
+      if (positionY < center) return i;
+    }
+    return sorted.length - 1;
+  }
+
+  const goalPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: () => !!draggingGoalId,
+      onPanResponderMove: (_, gesture) => {
+        handleGoalMove(gesture.dy);
+      },
+      onPanResponderRelease: () => {
+        finishGoalDrag();
+      },
+      onPanResponderTerminationRequest: () => true,
+      onPanResponderTerminate: () => {
+        finishGoalDrag();
+      },
+    })
+  ).current;
 
   return (
     <View style={{ flex: 1, backgroundColor: "#f6f6f6", paddingTop: 12 }}>
       <FlatList
         data={workouts}
-        keyExtractor={(_, idx) => String(idx)}
+        keyExtractor={(item) => item.id}
         ListHeaderComponent={
           <View>
             <Tile>
-              <Text style={{ fontSize: 18, fontWeight: "900" }}>{groupNickname ?? displayName}</Text>
-              <Text style={{ marginTop: 8, fontWeight: "800" }}>
-                Progress: {completed} / {target ?? "—"}
+              <Text style={{ fontSize: 18, fontWeight: "900" }}>{goalTitle}</Text>
+              <Text style={{ marginTop: 6, opacity: 0.65 }}>
+                Member summary for {goalTitle} in this group.
               </Text>
-
-              <View
-                style={{
-                  height: 10,
-                  borderRadius: 999,
-                  backgroundColor: "#e8e8e8",
-                  marginTop: 10,
-                  overflow: "hidden",
-                }}
-              >
-                <View style={{ width: `${ratio * 100}%`, height: "100%", backgroundColor: "#111" }} />
-              </View>
-
-              <Text style={{ marginTop: 8, opacity: 0.6 }}>Recent workouts</Text>
             </Tile>
 
-            {isSelf ? (
+            {goals.length === 0 ? (
               <Tile>
-                <Text style={{ fontSize: 16, fontWeight: "900" }}>Edit your goal</Text>
-                <Text style={{ opacity: 0.7, marginTop: 6 }}>
-                  Update your dates or total workouts for this group.
-                </Text>
-
-                <Text style={{ marginTop: 14, fontWeight: "800" }}>Goal start date</Text>
-                <TextField
-                  label="Goal start date (YYYY-MM-DD)"
-                  value={goalStartDateISO}
-                  onChangeText={setGoalStartDateISO}
-                  placeholder="2026-01-01"
-                />
-                <Button title="Select start date" onPress={() => setShowStartCalendar(true)} />
-
-                <Text style={{ marginTop: 14, fontWeight: "800" }}>Goal date</Text>
-                <TextField
-                  label="Goal date (YYYY-MM-DD)"
-                  value={goalDateISO}
-                  onChangeText={setGoalDateISO}
-                  placeholder="2026-01-15"
-                />
-                <Button title="Select goal date" onPress={() => setShowGoalCalendar(true)} />
-
-                <TextField
-                  label="Workouts by that date"
-                  value={targetWorkouts}
-                  onChangeText={setTargetWorkouts}
-                  placeholder="e.g., 12"
-                  keyboardType="number-pad"
-                />
-
-                <Button
-                  title={savingGoal ? "Saving…" : "Save goal updates"}
-                  onPress={saveGoal}
-                  disabled={savingGoal}
-                />
+                <Text style={{ opacity: 0.7 }}>No goals found yet for this group.</Text>
               </Tile>
             ) : null}
+
+            <View
+              onLayout={(event) => setGoalContainerHeight(event.nativeEvent.layout.height)}
+              {...goalPanResponder.panHandlers}
+            >
+              {goals.map((goal) => {
+                const isDragging = draggingGoalId === goal.id;
+                return (
+                  <View
+                    key={goal.id}
+                    onLayout={(event) => {
+                      const { y, height } = event.nativeEvent.layout;
+                      goalLayouts.current[goal.id] = { y, height };
+                    }}
+                    style={{ opacity: isDragging ? 0 : 1 }}
+                  >
+                    {renderGoalTile({
+                      goal,
+                      isSelf,
+                      onLongPress: () => startGoalDrag(goal),
+                      onMenuPress: openGoalMenu,
+                    })}
+                  </View>
+                );
+              })}
+
+              {draggingGoal ? (
+                <View
+                  pointerEvents="none"
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    right: 0,
+                    top: dragPosition.current,
+                    zIndex: 10,
+                    shadowColor: "#000",
+                    shadowOpacity: 0.15,
+                    shadowRadius: 10,
+                    shadowOffset: { width: 0, height: 6 },
+                    elevation: 6,
+                  }}
+                >
+                  {renderGoalTile({
+                    goal: draggingGoal,
+                    isSelf,
+                    onLongPress: () => {},
+                    onMenuPress: openGoalMenu,
+                  })}
+                </View>
+              ) : null}
+            </View>
+
+            {isSelf ? (
+              <View style={{ paddingHorizontal: 16 }}>
+                <Button title="Add a goal" onPress={() => nav.navigate("GoalSetup", { groupId: params.groupId })} />
+              </View>
+            ) : null}
+
+            <View style={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4 }}>
+              <Text style={{ fontSize: 16, fontWeight: "900" }}>Workout summaries</Text>
+            </View>
           </View>
         }
         renderItem={({ item }) => (
           <Tile>
-            <Text style={{ fontWeight: "900" }}>{formatWorkoutTitle(item)}</Text>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <Text style={{ fontWeight: "900" }}>{formatWorkoutTitle(item)}</Text>
+              {isSelf ? (
+                <Pressable
+                  onPress={() => openWorkoutMenu(item)}
+                  style={{ paddingHorizontal: 6, paddingVertical: 2 }}
+                  accessibilityLabel="Workout options"
+                >
+                  <Text style={{ fontSize: 22, fontWeight: "900" }}>⋯</Text>
+                </Pressable>
+              ) : null}
+            </View>
             {formatWorkoutMeta(item) ? (
               <Text style={{ marginTop: 6, opacity: 0.7 }}>{formatWorkoutMeta(item)}</Text>
             ) : null}
@@ -227,51 +351,23 @@ export default function MemberProfileScreen() {
         )}
       />
 
-      <DatePickerModal
-        visible={showStartCalendar}
-        title="Select your goal start date"
-        initialDateISO={goalStartDateISO}
-        maxDateISO={goalDateISO}
-        onClose={() => setShowStartCalendar(false)}
-        onSelect={(iso) => {
-          setGoalStartDateISO(iso);
-          setShowStartCalendar(false);
-        }}
-      />
-
-      <DatePickerModal
-        visible={showGoalCalendar}
-        title="Select your goal date"
-        initialDateISO={goalDateISO}
-        minDateISO={goalStartDateISO}
-        onClose={() => setShowGoalCalendar(false)}
-        onSelect={(iso) => {
-          setGoalDateISO(iso);
-          setShowGoalCalendar(false);
-        }}
+      <EditWorkoutModal
+        visible={showWorkoutEditor}
+        onClose={() => setShowWorkoutEditor(false)}
+        workout={editingWorkout}
+        userId={params.userId}
+        onSaved={handleWorkoutSaved}
       />
     </View>
   );
 }
 
-function todayISO() {
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function isValidISO(iso: string) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
-  if (!m) return false;
-  const y = Number(m[1]);
-  const mo = Number(m[2]);
-  const da = Number(m[3]);
-  if (mo < 1 || mo > 12) return false;
-  if (da < 1 || da > 31) return false;
-  if (y < 2000 || y > 2100) return false;
-  return true;
+function sortWorkouts(rows: WorkoutRow[]) {
+  return [...rows].sort((a, b) => {
+    const ta = getWorkoutTime(a);
+    const tb = getWorkoutTime(b);
+    return tb - ta;
+  });
 }
 
 function cap(s: string) {
@@ -292,7 +388,7 @@ function formatWorkoutMeta(item: WorkoutRow) {
   }
   const when = item.date ?? item.createdAt;
   if (when?.toDate) {
-    parts.push(when.toDate().toLocaleDateString());
+    parts.push(formatFriendlyDate(when.toDate()));
   }
   return parts.join(" • ");
 }
@@ -301,4 +397,107 @@ function getWorkoutTime(item: WorkoutRow) {
   const when = item.date ?? item.createdAt;
   if (when?.toMillis) return when.toMillis();
   return 0;
+}
+
+function formatGoalDate(iso: string) {
+  const parsed = parseISOToUTCDate(iso);
+  if (!parsed) return iso;
+  return formatFriendlyDate(parsed);
+}
+
+function formatFriendlyDate(d: Date) {
+  return d.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function parseISOToUTCDate(iso: string) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const da = Number(m[3]);
+  if (mo < 1 || mo > 12 || da < 1 || da > 31) return null;
+  return new Date(Date.UTC(y, mo - 1, da));
+}
+
+function renderGoalTile({
+  goal,
+  isSelf,
+  onLongPress,
+  onMenuPress,
+}: {
+  goal: GoalEntry;
+  isSelf: boolean;
+  onLongPress: () => void;
+  onMenuPress: () => void;
+}) {
+  const ratio = goal.targetWorkouts ? Math.min(1, goal.completedWorkouts / goal.targetWorkouts) : 0;
+  const reason = goal.goalDateReason?.trim() || "Why is this date important?";
+  const targetLabel = goal.goalDateISO ? formatGoalDate(goal.goalDateISO) : "No target date";
+
+  return (
+    <Tile>
+      <Pressable onLongPress={onLongPress} delayLongPress={250}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+          <Text style={{ fontWeight: "800" }}>
+            Progress: {goal.completedWorkouts} / {goal.targetWorkouts || "—"}
+          </Text>
+          {isSelf ? (
+            <Pressable onPress={onMenuPress} style={{ paddingHorizontal: 6, paddingVertical: 2 }}>
+              <Text style={{ fontSize: 22, fontWeight: "900" }}>⋯</Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        <View
+          style={{
+            position: "relative",
+            marginTop: 8,
+            marginBottom: 8,
+            minHeight: 22,
+            justifyContent: "center",
+          }}
+        >
+          <Text style={{ textAlign: "center", fontWeight: "700", opacity: goal.goalDateReason ? 0.9 : 0.6 }}>
+            {reason}
+          </Text>
+          <View
+            style={{
+              position: "absolute",
+              right: 0,
+              top: 0,
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+              borderRadius: 999,
+              backgroundColor: "#f3f3f3",
+            }}
+          >
+            <Text style={{ fontSize: 12, fontWeight: "800" }}>{targetLabel}</Text>
+          </View>
+        </View>
+
+        <View
+          style={{
+            height: 10,
+            borderRadius: 999,
+            backgroundColor: "#e8e8e8",
+            overflow: "hidden",
+          }}
+        >
+          <View style={{ width: `${ratio * 100}%`, height: "100%", backgroundColor: "#111" }} />
+        </View>
+      </Pressable>
+    </Tile>
+  );
+}
+
+function moveArrayItem<T>(list: T[], from: number, to: number) {
+  const next = [...list];
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
 }

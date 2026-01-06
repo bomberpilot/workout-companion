@@ -107,11 +107,13 @@ export default function HomeScreen() {
                 doc(db, "groups", gid, "goals", user.uid),
                 (goalSnap) => {
                   const gd = goalSnap.data() as any;
+                  const primaryGoal =
+                    Array.isArray(gd?.goalEntries) && gd.goalEntries.length > 0 ? gd.goalEntries[0] : gd;
                   next[gid] = {
                     ...(next[gid] ?? { groupId: gid, groupName: "Group" }),
                     groupId: gid,
-                    targetWorkouts: gd?.targetWorkouts ?? undefined,
-                    goalDateISO: gd?.goalDateISO ?? undefined,
+                    targetWorkouts: primaryGoal?.targetWorkouts ?? undefined,
+                    goalDateISO: primaryGoal?.goalDateISO ?? undefined,
                   };
                   setCards(Object.values(next));
                 },
