@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, FlatList, Alert } from "react-native";
+import { View, Text, FlatList, Alert, Share } from "react-native";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
@@ -9,7 +9,7 @@ import { useAuth } from "../auth/useAuth";
 import { db } from "../config/firebase";
 import Tile from "../components/ui/Tile";
 import Button from "../components/ui/Button";
-import { groupMemberDoc, groupMembersCol, userGroupDoc } from "../firestore/paths";
+import { groupDoc, groupMemberDoc, groupMembersCol, userGroupDoc } from "../firestore/paths";
 import { formatDurationMinutes } from "../utils/progress";
 
 type R = RouteProp<RootStackParamList, "GroupProgress">;
@@ -21,8 +21,8 @@ type Row = {
   target: number;
   completed: number;
   totalDurationMinutes: number;
-  goalDateReason?: string;
   goalDateISO?: string;
+  goalDateReason?: string;
 };
 
 type GoalRow = {
@@ -31,12 +31,42 @@ type GoalRow = {
   completed: number;
   totalDurationMinutes: number;
   displayName?: string;
-  goalDateReason?: string;
   goalDateISO?: string;
+  goalDateReason?: string;
+};
+
+type GroupMeta = {
+  name?: string;
+  inviteCode?: string;
 };
 
 function clamp01(x: number) {
   return Math.max(0, Math.min(1, x));
+}
+
+function formatGoalDate(iso: string) {
+  const parsed = parseISOToUTCDate(iso);
+  if (!parsed) return iso;
+  return formatFriendlyDate(parsed);
+}
+
+function formatFriendlyDate(d: Date) {
+  return d.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function parseISOToUTCDate(iso: string) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const da = Number(m[3]);
+  if (mo < 1 || mo > 12 || da < 1 || da > 31) return null;
+  return new Date(Date.UTC(y, mo - 1, da));
 }
 
 export default function GroupProgressScreen() {
@@ -46,6 +76,7 @@ export default function GroupProgressScreen() {
   const [rows, setRows] = useState<Row[]>([]);
   const [goalRows, setGoalRows] = useState<GoalRow[]>([]);
   const [memberNames, setMemberNames] = useState<Record<string, string>>({});
+  const [group, setGroup] = useState<GroupMeta>({});
 
   useEffect(() => {
     if (!user) return;
@@ -74,16 +105,17 @@ export default function GroupProgressScreen() {
             const completed = Number(gd?.completedWorkouts ?? 0) || 0;
             const totalDurationMinutes = Number(gd?.totalDurationMinutes ?? 0) || 0;
             const displayName = String(gd?.displayName ?? "").trim() || d.id.slice(0, 6);
-            const goalEntries = Array.isArray(gd?.goalEntries) ? gd.goalEntries : [];
-            const entryReason = goalEntries.find((entry: any) => typeof entry?.goalDateReason === "string");
-            const entryDate = goalEntries.find((entry: any) => typeof entry?.goalDateISO === "string");
-            const goalDateReason =
-              (typeof entryReason?.goalDateReason === "string" ? entryReason.goalDateReason : undefined) ??
-              (typeof gd?.goalDateReason === "string" ? gd.goalDateReason : undefined);
-            const goalDateISO =
-              (typeof entryDate?.goalDateISO === "string" ? entryDate.goalDateISO : undefined) ??
-              (typeof gd?.goalDateISO === "string" ? gd.goalDateISO : undefined);
-            return { userId: d.id, displayName, target, completed, totalDurationMinutes, goalDateReason, goalDateISO };
+            const goalDateISO = typeof gd?.goalDateISO === "string" ? gd.goalDateISO : undefined;
+            const goalDateReason = typeof gd?.goalDateReason === "string" ? gd.goalDateReason : undefined;
+            return {
+              userId: d.id,
+              displayName,
+              target,
+              completed,
+              totalDurationMinutes,
+              goalDateISO,
+              goalDateReason,
+            };
           });
 
           setGoalRows(next);
@@ -96,6 +128,19 @@ export default function GroupProgressScreen() {
       active = false;
       unsub();
     };
+  }, [params.groupId, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(
+      groupDoc(params.groupId),
+      (snap) => {
+        const d = snap.data() as any;
+        setGroup({ name: d?.name, inviteCode: d?.inviteCode });
+      },
+      (err) => Alert.alert("Group error", err.message)
+    );
+    return unsub;
   }, [params.groupId, user]);
 
   useEffect(() => {
@@ -124,8 +169,8 @@ export default function GroupProgressScreen() {
       completed: row.completed,
       totalDurationMinutes: row.totalDurationMinutes,
       displayName: memberNames[row.userId] ?? row.displayName ?? row.userId.slice(0, 6),
-      goalDateReason: row.goalDateReason,
       goalDateISO: row.goalDateISO,
+      goalDateReason: row.goalDateReason,
     }));
 
     nextRows.sort((a, b) => {
@@ -155,28 +200,52 @@ export default function GroupProgressScreen() {
     }
   }
 
+  async function shareInviteCode() {
+    const inviteCode = group.inviteCode?.trim();
+    if (!inviteCode) {
+      Alert.alert("Invite code", "No invite code available yet.");
+      return;
+    }
+
+    const groupName = group.name?.trim();
+    const message = groupName
+      ? `Join my group "${groupName}" on Workout Companion! Use invite code: ${inviteCode}`
+      : `Join my group on Workout Companion! Use invite code: ${inviteCode}`;
+
+    try {
+      await Share.share({ message });
+    } catch (err: any) {
+      Alert.alert("Share error", err?.message ?? "Unable to share invite code.");
+    }
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: "#f6f6f6", paddingTop: 12 }}>
+      <Tile>
+        <Text style={{ fontSize: 16, fontWeight: "900" }}>Membership</Text>
+        <Text style={{ marginTop: 6, opacity: 0.7 }}>
+          Leaving removes this group from your list and stops future messages.
+        </Text>
+      </Tile>
+
       <FlatList
         data={rows}
         keyExtractor={(r) => r.userId}
         renderItem={({ item }) => <ProgressRow row={item} />}
-        contentContainerStyle={{ paddingBottom: 16 }}
         ListEmptyComponent={
           <View style={{ padding: 16 }}>
             <Text style={{ opacity: 0.7 }}>No goals found yet for this group.</Text>
           </View>
         }
+        ListFooterComponent={
+          <View style={{ paddingHorizontal: 16, paddingBottom: 24 }}>
+            <View style={{ flexDirection: "row", gap: 12 }}>
+              <Button title="Share invite code" onPress={shareInviteCode} style={{ flex: 1 }} />
+              <Button title="Leave group" onPress={confirmLeaveGroup} style={{ flex: 1 }} />
+            </View>
+          </View>
+        }
       />
-      <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
-        <Tile>
-          <Text style={{ fontSize: 16, fontWeight: "900" }}>Membership</Text>
-          <Text style={{ marginTop: 6, opacity: 0.7 }}>
-            Leaving removes this group from your list and stops future messages.
-          </Text>
-          <Button title="Leave group" onPress={confirmLeaveGroup} />
-        </Tile>
-      </View>
     </View>
   );
 }
@@ -184,7 +253,7 @@ export default function GroupProgressScreen() {
 function ProgressRow({ row }: { row: Row }) {
   const pct = useMemo(() => (row.target ? clamp01(row.completed / row.target) : 0), [row.completed, row.target]);
   const totalTimeLabel = useMemo(() => formatDurationMinutes(row.totalDurationMinutes || 0), [row.totalDurationMinutes]);
-  const reasonLabel = row.goalDateReason?.trim() || "Why is this date important?";
+  const reason = row.goalDateReason?.trim() || "Why is this date important?";
   const targetLabel = row.goalDateISO ? formatGoalDate(row.goalDateISO) : "No target date";
 
   return (
@@ -194,6 +263,33 @@ function ProgressRow({ row }: { row: Row }) {
         <Text style={{ opacity: 0.7, fontWeight: "800" }}>
           {row.completed} / {row.target || "—"}
         </Text>
+      </View>
+
+      <View
+        style={{
+          position: "relative",
+          marginTop: 8,
+          marginBottom: 8,
+          minHeight: 22,
+          justifyContent: "center",
+        }}
+      >
+        <Text style={{ textAlign: "center", fontWeight: "700", opacity: row.goalDateReason ? 0.9 : 0.6 }}>
+          {reason}
+        </Text>
+        <View
+          style={{
+            position: "absolute",
+            right: 0,
+            top: 0,
+            paddingHorizontal: 10,
+            paddingVertical: 4,
+            borderRadius: 999,
+            backgroundColor: "#f3f3f3",
+          }}
+        >
+          <Text style={{ fontSize: 12, fontWeight: "800" }}>{targetLabel}</Text>
+        </View>
       </View>
 
       <View
@@ -216,57 +312,6 @@ function ProgressRow({ row }: { row: Row }) {
           Total Workout Time: {totalTimeLabel}
         </Text>
       </View>
-
-      <View
-        style={{
-          position: "relative",
-          marginTop: 8,
-          minHeight: 22,
-          justifyContent: "center",
-        }}
-      >
-        <Text style={{ textAlign: "center", fontWeight: "700", opacity: row.goalDateReason ? 0.9 : 0.6 }}>
-          {reasonLabel}
-        </Text>
-        <View
-          style={{
-            position: "absolute",
-            right: 0,
-            top: 0,
-            paddingHorizontal: 10,
-            paddingVertical: 4,
-            borderRadius: 999,
-            backgroundColor: "#f3f3f3",
-          }}
-        >
-          <Text style={{ fontSize: 12, fontWeight: "800" }}>{targetLabel}</Text>
-        </View>
-      </View>
     </Tile>
   );
-}
-
-function formatGoalDate(iso: string) {
-  const parsed = parseISOToUTCDate(iso);
-  if (!parsed) return iso;
-  return formatFriendlyDate(parsed);
-}
-
-function formatFriendlyDate(d: Date) {
-  return d.toLocaleDateString("en-GB", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function parseISOToUTCDate(iso: string) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
-  if (!m) return null;
-  const y = Number(m[1]);
-  const mo = Number(m[2]);
-  const da = Number(m[3]);
-  if (mo < 1 || mo > 12 || da < 1 || da > 31) return null;
-  return new Date(Date.UTC(y, mo - 1, da));
 }
