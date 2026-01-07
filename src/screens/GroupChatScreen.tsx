@@ -287,9 +287,12 @@ export default function GroupChatScreen() {
     >
       <View style={{ flex: 1 }}>
         <View style={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 6 }}>
-          <Text style={{ fontSize: 12, opacity: 0.7 }}>
-            Invite code: <Text style={{ fontWeight: "900" }}>{group.inviteCode ?? "—"}</Text>
-          </Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "baseline" }}>
+            <Text style={{ fontSize: 12, opacity: 0.7 }}>Invite code: </Text>
+            <Text style={{ fontSize: 12, fontWeight: "900" }} selectable>
+              {group.inviteCode ?? "—"}
+            </Text>
+          </View>
         </View>
 
         <FlatList

@@ -22,7 +22,7 @@ export type RootStackParamList = {
   Chat: { groupId: string };
   GroupProgress: { groupId: string };
   GoalSetup: { groupId: string };
-  GoalEdit: { groupId: string; userId: string };
+  GoalEdit: { groupId: string; userId: string; goalId?: string };
   Profile: undefined;
   MemberProfile: { groupId: string; userId: string };
   Settings: undefined;
@@ -38,64 +38,28 @@ export default function RootNavigator() {
   return (
     <Stack.Navigator>
       {!user ? (
-        <Stack.Screen
-          name="SignIn"
-          component={SignInScreen}
-          options={{ headerShown: false }}
-        />
+        <Stack.Screen name="SignIn" component={SignInScreen} options={{ headerShown: false }} />
       ) : (
-        <>
+        <Stack.Group>
           <Stack.Screen
             name="Home"
             component={HomeScreen}
             options={{ title: "Workout Accountability Companion" }}
           />
-          <Stack.Screen
-            name="CreateGroup"
-            component={CreateGroupScreen}
-            options={{ title: "Create group" }}
-          />
-          <Stack.Screen
-            name="JoinGroup"
-            component={JoinGroupScreen}
-            options={{ title: "Join group" }}
-          />
-          <Stack.Screen
-            name="Chat"
-            component={GroupChatScreen}
-            options={{ title: "Group chat" }}
-          />
-          <Stack.Screen
-            name="GroupProgress"
-            component={GroupProgressScreen}
-            options={{ title: "Group progress" }}
-          />
-          <Stack.Screen
-            name="GoalSetup"
-            component={GoalSetupScreen}
-            options={{ title: "Your goal" }}
-          />
-          <Stack.Screen
-            name="GoalEdit"
-            component={GoalEditScreen}
-            options={{ title: "Edit goal" }}
-          />
-          <Stack.Screen
-            name="Profile"
-            component={ProfileScreen}
-            options={{ title: "Profile" }}
-          />
+          <Stack.Screen name="CreateGroup" component={CreateGroupScreen} options={{ title: "Create group" }} />
+          <Stack.Screen name="JoinGroup" component={JoinGroupScreen} options={{ title: "Join group" }} />
+          <Stack.Screen name="Chat" component={GroupChatScreen} options={{ title: "Group chat" }} />
+          <Stack.Screen name="GroupProgress" component={GroupProgressScreen} options={{ title: "Group progress" }} />
+          <Stack.Screen name="GoalSetup" component={GoalSetupScreen} options={{ title: "Your goal" }} />
+          <Stack.Screen name="GoalEdit" component={GoalEditScreen} options={{ title: "Edit goal" }} />
+          <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: "Profile" }} />
           <Stack.Screen
             name="MemberProfile"
             component={MemberProfileScreen}
             options={{ title: "Member Summary" }}
           />
-          <Stack.Screen
-            name="Settings"
-            component={SettingsScreen}
-            options={{ title: "Settings" }}
-          />
-        </>
+          <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: "Settings" }} />
+        </Stack.Group>
       )}
     </Stack.Navigator>
   );

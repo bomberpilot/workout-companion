@@ -8,7 +8,6 @@ import { RootStackParamList } from "../navigation/RootNavigator";
 import { useAuth } from "../auth/useAuth";
 import { db } from "../config/firebase";
 import Tile from "../components/ui/Tile";
-import TextField from "../components/ui/TextField";
 import Button from "../components/ui/Button";
 import { groupMemberDoc, groupMembersCol, userGroupDoc } from "../firestore/paths";
 import { formatDurationMinutes } from "../utils/progress";
@@ -22,6 +21,8 @@ type Row = {
   target: number;
   completed: number;
   totalDurationMinutes: number;
+  goalDateReason?: string;
+  goalDateISO?: string;
 };
 
 type GoalRow = {
@@ -30,6 +31,8 @@ type GoalRow = {
   completed: number;
   totalDurationMinutes: number;
   displayName?: string;
+  goalDateReason?: string;
+  goalDateISO?: string;
 };
 
 function clamp01(x: number) {
@@ -43,9 +46,6 @@ export default function GroupProgressScreen() {
   const [rows, setRows] = useState<Row[]>([]);
   const [goalRows, setGoalRows] = useState<GoalRow[]>([]);
   const [memberNames, setMemberNames] = useState<Record<string, string>>({});
-  const [nickname, setNickname] = useState("");
-  const [dirtyNickname, setDirtyNickname] = useState(false);
-  const [savingNickname, setSavingNickname] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -74,7 +74,16 @@ export default function GroupProgressScreen() {
             const completed = Number(gd?.completedWorkouts ?? 0) || 0;
             const totalDurationMinutes = Number(gd?.totalDurationMinutes ?? 0) || 0;
             const displayName = String(gd?.displayName ?? "").trim() || d.id.slice(0, 6);
-            return { userId: d.id, displayName, target, completed, totalDurationMinutes };
+            const goalEntries = Array.isArray(gd?.goalEntries) ? gd.goalEntries : [];
+            const entryReason = goalEntries.find((entry: any) => typeof entry?.goalDateReason === "string");
+            const entryDate = goalEntries.find((entry: any) => typeof entry?.goalDateISO === "string");
+            const goalDateReason =
+              (typeof entryReason?.goalDateReason === "string" ? entryReason.goalDateReason : undefined) ??
+              (typeof gd?.goalDateReason === "string" ? gd.goalDateReason : undefined);
+            const goalDateISO =
+              (typeof entryDate?.goalDateISO === "string" ? entryDate.goalDateISO : undefined) ??
+              (typeof gd?.goalDateISO === "string" ? gd.goalDateISO : undefined);
+            return { userId: d.id, displayName, target, completed, totalDurationMinutes, goalDateReason, goalDateISO };
           });
 
           setGoalRows(next);
@@ -109,19 +118,14 @@ export default function GroupProgressScreen() {
   }, [initializing, params.groupId, user]);
 
   useEffect(() => {
-    if (!user) return;
-    if (dirtyNickname) return;
-    const currentNickname = memberNames[user.uid] ?? "";
-    setNickname(currentNickname);
-  }, [dirtyNickname, memberNames, user]);
-
-  useEffect(() => {
     const nextRows: Row[] = goalRows.map((row) => ({
       userId: row.userId,
       target: row.target,
       completed: row.completed,
       totalDurationMinutes: row.totalDurationMinutes,
       displayName: memberNames[row.userId] ?? row.displayName ?? row.userId.slice(0, 6),
+      goalDateReason: row.goalDateReason,
+      goalDateISO: row.goalDateISO,
     }));
 
     nextRows.sort((a, b) => {
@@ -132,35 +136,6 @@ export default function GroupProgressScreen() {
 
     setRows(nextRows);
   }, [goalRows, memberNames]);
-
-  async function saveNickname() {
-    if (!user) return;
-    const trimmed = nickname.trim();
-    if (!trimmed.length) {
-      Alert.alert("Nickname", "Enter a nickname to use for this group.");
-      return;
-    }
-
-    setSavingNickname(true);
-    try {
-      await setDoc(
-        doc(db, "groups", params.groupId, "members", user.uid),
-        { nickname: trimmed, updatedAt: serverTimestamp() },
-        { merge: true }
-      );
-      await setDoc(
-        doc(db, "users", user.uid, "groups", params.groupId),
-        { nickname: trimmed, updatedAt: serverTimestamp() },
-        { merge: true }
-      );
-      setDirtyNickname(false);
-      Alert.alert("Saved", "Your nickname for this group was updated.");
-    } catch (err: any) {
-      Alert.alert("Nickname error", err?.message ?? "Unable to update nickname.");
-    } finally {
-      setSavingNickname(false);
-    }
-  }
 
   function confirmLeaveGroup() {
     Alert.alert("Leave group?", "You will stop seeing this group and its messages.", [
@@ -182,41 +157,26 @@ export default function GroupProgressScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: "#f6f6f6", paddingTop: 12 }}>
-      <Tile>
-        <Text style={{ fontSize: 16, fontWeight: "900" }}>Your nickname in this group</Text>
-        <Text style={{ marginTop: 6, opacity: 0.7 }}>
-          This nickname will show in chat and progress lists for this group.
-        </Text>
-        <TextField
-          label="Nickname"
-          value={nickname}
-          onChangeText={(value) => {
-            setNickname(value);
-            setDirtyNickname(true);
-          }}
-          placeholder="e.g., Chief"
-        />
-        <Button title={savingNickname ? "Saving…" : "Save nickname"} onPress={saveNickname} disabled={savingNickname} />
-      </Tile>
-
-      <Tile>
-        <Text style={{ fontSize: 16, fontWeight: "900" }}>Membership</Text>
-        <Text style={{ marginTop: 6, opacity: 0.7 }}>
-          Leaving removes this group from your list and stops future messages.
-        </Text>
-        <Button title="Leave group" onPress={confirmLeaveGroup} />
-      </Tile>
-
       <FlatList
         data={rows}
         keyExtractor={(r) => r.userId}
         renderItem={({ item }) => <ProgressRow row={item} />}
+        contentContainerStyle={{ paddingBottom: 16 }}
         ListEmptyComponent={
           <View style={{ padding: 16 }}>
             <Text style={{ opacity: 0.7 }}>No goals found yet for this group.</Text>
           </View>
         }
       />
+      <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+        <Tile>
+          <Text style={{ fontSize: 16, fontWeight: "900" }}>Membership</Text>
+          <Text style={{ marginTop: 6, opacity: 0.7 }}>
+            Leaving removes this group from your list and stops future messages.
+          </Text>
+          <Button title="Leave group" onPress={confirmLeaveGroup} />
+        </Tile>
+      </View>
     </View>
   );
 }
@@ -224,6 +184,8 @@ export default function GroupProgressScreen() {
 function ProgressRow({ row }: { row: Row }) {
   const pct = useMemo(() => (row.target ? clamp01(row.completed / row.target) : 0), [row.completed, row.target]);
   const totalTimeLabel = useMemo(() => formatDurationMinutes(row.totalDurationMinutes || 0), [row.totalDurationMinutes]);
+  const reasonLabel = row.goalDateReason?.trim() || "Why is this date important?";
+  const targetLabel = row.goalDateISO ? formatGoalDate(row.goalDateISO) : "No target date";
 
   return (
     <Tile>
@@ -254,6 +216,57 @@ function ProgressRow({ row }: { row: Row }) {
           Total Workout Time: {totalTimeLabel}
         </Text>
       </View>
+
+      <View
+        style={{
+          position: "relative",
+          marginTop: 8,
+          minHeight: 22,
+          justifyContent: "center",
+        }}
+      >
+        <Text style={{ textAlign: "center", fontWeight: "700", opacity: row.goalDateReason ? 0.9 : 0.6 }}>
+          {reasonLabel}
+        </Text>
+        <View
+          style={{
+            position: "absolute",
+            right: 0,
+            top: 0,
+            paddingHorizontal: 10,
+            paddingVertical: 4,
+            borderRadius: 999,
+            backgroundColor: "#f3f3f3",
+          }}
+        >
+          <Text style={{ fontSize: 12, fontWeight: "800" }}>{targetLabel}</Text>
+        </View>
+      </View>
     </Tile>
   );
+}
+
+function formatGoalDate(iso: string) {
+  const parsed = parseISOToUTCDate(iso);
+  if (!parsed) return iso;
+  return formatFriendlyDate(parsed);
+}
+
+function formatFriendlyDate(d: Date) {
+  return d.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function parseISOToUTCDate(iso: string) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const da = Number(m[3]);
+  if (mo < 1 || mo > 12 || da < 1 || da > 31) return null;
+  return new Date(Date.UTC(y, mo - 1, da));
 }

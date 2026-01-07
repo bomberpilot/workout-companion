@@ -9,6 +9,7 @@ import { useAuth } from "../auth/useAuth";
 import { db } from "../config/firebase";
 import Tile from "../components/ui/Tile";
 import Button from "../components/ui/Button";
+import TextField from "../components/ui/TextField";
 import EditWorkoutModal from "../components/workout/EditWorkoutModal";
 import { groupMemberDoc, userWorkoutsCol } from "../firestore/paths";
 
@@ -41,6 +42,10 @@ export default function MemberProfileScreen() {
   const { user, initializing } = useAuth();
   const [displayName, setDisplayName] = useState(params.userId.slice(0, 6));
   const [groupNickname, setGroupNickname] = useState<string | null>(null);
+  const [nickname, setNickname] = useState("");
+  const [dirtyNickname, setDirtyNickname] = useState(false);
+  const [savingNickname, setSavingNickname] = useState(false);
+  const [showNicknameEditor, setShowNicknameEditor] = useState(false);
   const [goals, setGoals] = useState<GoalEntry[]>([]);
   const [workouts, setWorkouts] = useState<WorkoutRow[]>([]);
   const [editingWorkout, setEditingWorkout] = useState<WorkoutRow | null>(null);
@@ -106,6 +111,11 @@ export default function MemberProfileScreen() {
   }, [initializing, params.groupId, params.userId, user]);
 
   useEffect(() => {
+    if (!isSelf || dirtyNickname) return;
+    setNickname(groupNickname ?? "");
+  }, [dirtyNickname, groupNickname, isSelf]);
+
+  useEffect(() => {
     if (initializing || !user) return;
     (async () => {
       try {
@@ -134,6 +144,17 @@ export default function MemberProfileScreen() {
     setShowWorkoutEditor(true);
   }
 
+  function openMemberMenu() {
+    if (!isSelf) return;
+    Alert.alert("Member options", "Choose an action", [
+      {
+        text: showNicknameEditor ? "Hide nickname editor" : "Edit nickname",
+        onPress: () => setShowNicknameEditor((prev) => !prev),
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }
+
   function openGoalMenu(goalId?: string) {
     Alert.alert("Goal options", "Choose an action", [
       {
@@ -160,6 +181,36 @@ export default function MemberProfileScreen() {
 
   function getGoalIndex(id: string) {
     return goals.findIndex((goal) => goal.id === id);
+  }
+
+  async function saveNickname() {
+    if (!user || !isSelf) return;
+    const trimmed = nickname.trim();
+    if (!trimmed.length) {
+      Alert.alert("Nickname", "Enter a nickname to use for this group.");
+      return;
+    }
+
+    setSavingNickname(true);
+    try {
+      await setDoc(
+        doc(db, "groups", params.groupId, "members", user.uid),
+        { nickname: trimmed, updatedAt: serverTimestamp() },
+        { merge: true }
+      );
+      await setDoc(
+        doc(db, "users", user.uid, "groups", params.groupId),
+        { nickname: trimmed, updatedAt: serverTimestamp() },
+        { merge: true }
+      );
+      setDirtyNickname(false);
+      setShowNicknameEditor(false);
+      Alert.alert("Saved", "Your nickname for this group was updated.");
+    } catch (err: any) {
+      Alert.alert("Nickname error", err?.message ?? "Unable to update nickname.");
+    } finally {
+      setSavingNickname(false);
+    }
   }
 
   async function persistGoalOrder(nextGoals: GoalEntry[]) {
@@ -255,11 +306,45 @@ export default function MemberProfileScreen() {
         ListHeaderComponent={
           <View>
             <Tile>
-              <Text style={{ fontSize: 18, fontWeight: "900" }}>{goalTitle}</Text>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={{ fontSize: 18, fontWeight: "900" }}>{goalTitle}</Text>
+                {isSelf ? (
+                  <Pressable
+                    onPress={openMemberMenu}
+                    style={{ paddingHorizontal: 6, paddingVertical: 2 }}
+                    accessibilityLabel="Member options"
+                  >
+                    <Text style={{ fontSize: 22, fontWeight: "900" }}>⋯</Text>
+                  </Pressable>
+                ) : null}
+              </View>
               <Text style={{ marginTop: 6, opacity: 0.65 }}>
                 Member summary for {goalTitle} in this group.
               </Text>
             </Tile>
+
+            {showNicknameEditor && isSelf ? (
+              <Tile>
+                <Text style={{ fontSize: 16, fontWeight: "900" }}>Your nickname in this group</Text>
+                <Text style={{ marginTop: 6, opacity: 0.7 }}>
+                  This nickname will show in chat and progress lists for this group.
+                </Text>
+                <TextField
+                  label="Nickname"
+                  value={nickname}
+                  onChangeText={(value) => {
+                    setNickname(value);
+                    setDirtyNickname(true);
+                  }}
+                  placeholder="e.g., Chief"
+                />
+                <Button
+                  title={savingNickname ? "Saving…" : "Save nickname"}
+                  onPress={saveNickname}
+                  disabled={savingNickname}
+                />
+              </Tile>
+            ) : null}
 
             {goals.length === 0 ? (
               <Tile>
