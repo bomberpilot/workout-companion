@@ -221,14 +221,7 @@ export default function GroupProgressScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: "#f6f6f6", paddingTop: 12 }}>
-      <Tile>
-        <Text style={{ fontSize: 16, fontWeight: "900" }}>Membership</Text>
-        <Text style={{ marginTop: 6, opacity: 0.7 }}>
-          Leaving removes this group from your list and stops future messages.
-        </Text>
-      </Tile>
-
-      <FlatList
+           <FlatList
         data={rows}
         keyExtractor={(r) => r.userId}
         renderItem={({ item }) => <ProgressRow row={item} />}
@@ -237,15 +230,22 @@ export default function GroupProgressScreen() {
             <Text style={{ opacity: 0.7 }}>No goals found yet for this group.</Text>
           </View>
         }
-        ListFooterComponent={
-          <View style={{ paddingHorizontal: 16, paddingBottom: 24 }}>
-            <View style={{ flexDirection: "row", gap: 12 }}>
-              <Button title="Share invite code" onPress={shareInviteCode} style={{ flex: 1 }} />
-              <Button title="Leave group" onPress={confirmLeaveGroup} style={{ flex: 1 }} />
-            </View>
-          </View>
-        }
+         contentContainerStyle={{ paddingBottom: 24 }}
       />
+            <View
+              style={{
+                paddingHorizontal: 16,
+                paddingVertical: 12,
+                borderTopWidth: 1,
+                borderTopColor: "#e5e5e5",
+                backgroundColor: "#f6f6f6",
+              }}
+            >
+              <View style={{ flexDirection: "row", gap: 12 }}>
+                <Button title="Share invite code" onPress={shareInviteCode} style={{ flex: 1 }} />
+                <Button title="Leave group" onPress={confirmLeaveGroup} style={{ flex: 1 }} />
+              </View>
+            </View>
     </View>
   );
 }
