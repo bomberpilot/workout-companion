@@ -44,6 +44,10 @@ function clamp01(x: number) {
   return Math.max(0, Math.min(1, x));
 }
 
+function readCompletedWorkouts(value: any) {
+  return Number(value ?? 0) || 0;
+}
+
 function formatGoalDate(iso: string) {
   const parsed = parseISOToUTCDate(iso);
   if (!parsed) return iso;
@@ -102,7 +106,7 @@ export default function GroupProgressScreen() {
           const next: GoalRow[] = snap.docs.map((d) => {
             const gd = d.data() as any;
             const target = Number(gd?.targetWorkouts ?? 0) || 0;
-            const completed = Number(gd?.completedWorkouts ?? 0) || 0;
+            const completed = readCompletedWorkouts(gd?.completedWorkouts);
             const totalDurationMinutes = Number(gd?.totalDurationMinutes ?? 0) || 0;
             const displayName = String(gd?.displayName ?? "").trim() || d.id.slice(0, 6);
             const goalDateISO = typeof gd?.goalDateISO === "string" ? gd.goalDateISO : undefined;

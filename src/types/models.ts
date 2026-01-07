@@ -41,9 +41,11 @@ export type GroupMember = {
 export type Workout = {
   id: string;
   userId: string;
+  groupId: string;
   activityTypes: string[];
   durationMinutes: number;
   date: Timestamp;
+  performedAt: Timestamp;
   notes?: string;              // NEW: global notes
   createdAt?: Timestamp;
   updatedAt?: Timestamp;

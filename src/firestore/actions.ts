@@ -199,15 +199,20 @@ export async function updateGroupSettings(params: { groupId: string; patch: Grou
 
 export async function createWorkout(params: {
   userId: string;
+  groupId: string;
   activityTypes: string[];
   durationMinutes: number;
   date: Date;
   notes?: string;
 }) {
+  const performedAt = Timestamp.fromDate(params.date);
   const payload = {
+    userId: params.userId,
+    groupId: params.groupId,
     activityTypes: params.activityTypes,
     durationMinutes: Math.max(0, Math.floor(params.durationMinutes || 0)),
-    date: Timestamp.fromDate(params.date),
+    date: performedAt,
+    performedAt,
     notes: (params.notes ?? "").trim(),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -288,6 +293,7 @@ export async function logWorkoutToAllGroups(params: {
 }) {
   const w = await createWorkout({
     userId: params.userId,
+    groupId: "all",
     activityTypes: params.activityTypes,
     durationMinutes: params.durationMinutes,
     date: params.date,
@@ -347,6 +353,7 @@ export async function logWorkoutFromGroupChat(params: {
 }) {
   const w = await createWorkout({
     userId: params.userId,
+    groupId: params.groupId,
     activityTypes: params.activityTypes,
     durationMinutes: params.durationMinutes,
     date: params.date,

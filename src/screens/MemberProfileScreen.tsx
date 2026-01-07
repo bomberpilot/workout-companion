@@ -36,6 +36,10 @@ type WorkoutRow = {
   notes?: string | null;
 };
 
+function readCompletedWorkouts(value: any) {
+  return Number(value ?? 0) || 0;
+}
+
 export default function MemberProfileScreen() {
   const { params } = useRoute<R>();
   const nav = useNavigation<Nav>();
@@ -74,7 +78,7 @@ export default function MemberProfileScreen() {
         const entries = g.goalEntries.map((entry: any, idx: number) => ({
           id: entry?.id ?? `${snap.id}-${idx}`,
           targetWorkouts: Number(entry?.targetWorkouts ?? entry?.targetValue ?? 0) || 0,
-          completedWorkouts: Number(entry?.completedWorkouts ?? 0) || 0,
+          completedWorkouts: readCompletedWorkouts(entry?.completedWorkouts),
           goalDateISO: typeof entry?.goalDateISO === "string" ? entry.goalDateISO : undefined,
           goalStartDateISO: typeof entry?.goalStartDateISO === "string" ? entry.goalStartDateISO : undefined,
           goalDateReason: typeof entry?.goalDateReason === "string" ? entry.goalDateReason : undefined,
@@ -85,7 +89,7 @@ export default function MemberProfileScreen() {
           {
             id: snap.id,
             targetWorkouts: Number(g?.targetWorkouts ?? g?.targetValue ?? 0) || 0,
-            completedWorkouts: Number(g?.completedWorkouts ?? 0) || 0,
+            completedWorkouts: readCompletedWorkouts(g?.completedWorkouts),
             goalDateISO: typeof g?.goalDateISO === "string" ? g.goalDateISO : undefined,
             goalStartDateISO: typeof g?.goalStartDateISO === "string" ? g.goalStartDateISO : undefined,
             goalDateReason: typeof g?.goalDateReason === "string" ? g.goalDateReason : undefined,
