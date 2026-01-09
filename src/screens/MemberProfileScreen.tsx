@@ -40,6 +40,31 @@ function readCompletedWorkouts(value: any) {
   return Number(value ?? 0) || 0;
 }
 
+function getWorkoutMillis(item: WorkoutRow) {
+  const when = item.date ?? item.createdAt;
+  if (when?.toMillis) return when.toMillis();
+  if (when?.toDate) return when.toDate().getTime();
+  if (when instanceof Date) return when.getTime();
+  return 0;
+}
+
+function resolveGoalCompletedWorkouts(goal: GoalEntry, workouts: WorkoutRow[]) {
+  if (goal.goalStartDateISO && goal.goalDateISO) {
+    const start = parseISOToUTCDate(goal.goalStartDateISO);
+    const end = parseISOToUTCDate(goal.goalDateISO);
+    if (start && end) {
+      const startMs = start.getTime();
+      const endMs = end.getTime() + 86400000 - 1;
+      return workouts.reduce((sum, workout) => {
+        const ms = getWorkoutMillis(workout);
+        if (ms >= startMs && ms <= endMs) return sum + 1;
+        return sum;
+      }, 0);
+    }
+  }
+  return readCompletedWorkouts(goal.completedWorkouts);
+}
+
 export default function MemberProfileScreen() {
   const { params } = useRoute<R>();
   const nav = useNavigation<Nav>();
@@ -60,6 +85,14 @@ export default function MemberProfileScreen() {
   const dragPosition = useRef(0);
   const goalLayouts = useRef<Record<string, { y: number; height: number }>>({});
   const isSelf = user?.uid === params.userId;
+  const goalsWithProgress = useMemo(
+    () =>
+      goals.map((goal) => ({
+        ...goal,
+        displayCompletedWorkouts: resolveGoalCompletedWorkouts(goal, workouts),
+      })),
+    [goals, workouts]
+  );
 
   useEffect(() => {
     if (initializing || !user) return;
@@ -139,8 +172,8 @@ export default function MemberProfileScreen() {
 
   const goalTitle = groupNickname ?? displayName;
   const draggingGoal = useMemo(
-    () => (draggingGoalId ? goals.find((goal) => goal.id === draggingGoalId) ?? null : null),
-    [draggingGoalId, goals]
+    () => (draggingGoalId ? goalsWithProgress.find((goal) => goal.id === draggingGoalId) ?? null : null),
+    [draggingGoalId, goalsWithProgress]
   );
 
   function openWorkoutEditor(item: WorkoutRow) {
@@ -360,7 +393,7 @@ export default function MemberProfileScreen() {
               onLayout={(event) => setGoalContainerHeight(event.nativeEvent.layout.height)}
               {...goalPanResponder.panHandlers}
             >
-              {goals.map((goal) => {
+              {goalsWithProgress.map((goal) => {
                 const isDragging = draggingGoalId === goal.id;
                 return (
                   <View
@@ -373,6 +406,7 @@ export default function MemberProfileScreen() {
                   >
                     {renderGoalTile({
                       goal,
+                      completedWorkouts: goal.displayCompletedWorkouts,
                       isSelf,
                       onLongPress: () => startGoalDrag(goal),
                       onMenuPress: () => openGoalMenu(goal.id),
@@ -399,6 +433,7 @@ export default function MemberProfileScreen() {
                 >
                   {renderGoalTile({
                     goal: draggingGoal,
+                    completedWorkouts: draggingGoal.displayCompletedWorkouts,
                     isSelf,
                     onLongPress: () => {},
                     onMenuPress: () => openGoalMenu(draggingGoal.id),
@@ -515,16 +550,18 @@ function parseISOToUTCDate(iso: string) {
 
 function renderGoalTile({
   goal,
+  completedWorkouts,
   isSelf,
   onLongPress,
   onMenuPress,
 }: {
   goal: GoalEntry;
+  completedWorkouts: number;
   isSelf: boolean;
   onLongPress: () => void;
   onMenuPress: () => void;
 }) {
-  const ratio = goal.targetWorkouts ? Math.min(1, goal.completedWorkouts / goal.targetWorkouts) : 0;
+  const ratio = goal.targetWorkouts ? Math.min(1, completedWorkouts / goal.targetWorkouts) : 0;
   const reason = goal.goalDateReason?.trim() || "Why is this date important?";
   const targetLabel = goal.goalDateISO ? formatGoalDate(goal.goalDateISO) : "No target date";
 
@@ -533,7 +570,7 @@ function renderGoalTile({
       <Pressable onLongPress={onLongPress} delayLongPress={250}>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
           <Text style={{ fontWeight: "800" }}>
-            Progress: {goal.completedWorkouts} / {goal.targetWorkouts || "—"}
+            Progress: {completedWorkouts} / {goal.targetWorkouts || "—"}
           </Text>
           {isSelf ? (
             <Pressable onPress={onMenuPress} style={{ paddingHorizontal: 6, paddingVertical: 2 }}>
