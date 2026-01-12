@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, Alert } from "react-native";
+import { Alert, Text, View } from "react-native";
 import { collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where } from "firebase/firestore";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -7,15 +7,18 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/RootNavigator";
 import { useAuth } from "../auth/useAuth";
 import { db } from "../config/firebase";
-import Tile from "../components/ui/Tile";
 import TextField from "../components/ui/TextField";
 import Button from "../components/ui/Button";
+import Card from "../components/ui/Card";
+import SectionHeader from "../components/ui/SectionHeader";
+import { useTheme } from "../theme/ThemeProvider";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "JoinGroup">;
 
 export default function JoinGroupScreen() {
   const nav = useNavigation<Nav>();
   const { user } = useAuth();
+  const { colors, spacing } = useTheme();
 
   const [inviteCode, setInviteCode] = useState("");
   const [nickname, setNickname] = useState("");
@@ -76,11 +79,10 @@ export default function JoinGroupScreen() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#f6f6f6", padding: 16 }}>
-      <Tile>
-        <Text style={{ fontSize: 20, fontWeight: "900" }}>Join group</Text>
-        <Text style={{ marginTop: 6, opacity: 0.7 }}>Enter an invite code to join a group.</Text>
+    <View style={{ flex: 1, backgroundColor: colors.background.primary, padding: spacing.lg }}>
+      <SectionHeader title="Join group" subtitle="Enter an invite code to join a group." />
 
+      <Card style={{ marginTop: spacing.lg }}>
         <TextField label="Invite code" value={inviteCode} onChangeText={setInviteCode} placeholder="e.g., BQKW12" />
         <TextField
           label="Your nickname in this group"
@@ -89,7 +91,7 @@ export default function JoinGroupScreen() {
           placeholder={defaultNickname || "e.g., Chief"}
         />
         <Button title={busy ? "Working…" : "Join group"} onPress={joinGroup} disabled={busy} />
-      </Tile>
+      </Card>
     </View>
   );
 }

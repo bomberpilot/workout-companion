@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, FlatList, Alert, Share } from "react-native";
+import { Alert, FlatList, Share, StyleSheet, Text, View } from "react-native";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
@@ -7,10 +7,12 @@ import { collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc } from 
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { useAuth } from "../auth/useAuth";
 import { db } from "../config/firebase";
-import Tile from "../components/ui/Tile";
 import Button from "../components/ui/Button";
+import Card from "../components/ui/Card";
+import SectionHeader from "../components/ui/SectionHeader";
 import { groupDoc, groupMemberDoc, groupMembersCol, userGroupDoc } from "../firestore/paths";
 import { formatDurationMinutes } from "../utils/progress";
+import { useTheme } from "../theme/ThemeProvider";
 
 type R = RouteProp<RootStackParamList, "GroupProgress">;
 type Nav = NativeStackNavigationProp<RootStackParamList, "GroupProgress">;
@@ -77,6 +79,7 @@ export default function GroupProgressScreen() {
   const { params } = useRoute<R>();
   const nav = useNavigation<Nav>();
   const { user, initializing } = useAuth();
+  const { colors, spacing, typography } = useTheme();
   const [rows, setRows] = useState<Row[]>([]);
   const [goalRows, setGoalRows] = useState<GoalRow[]>([]);
   const [memberNames, setMemberNames] = useState<Record<string, string>>({});
@@ -224,47 +227,58 @@ export default function GroupProgressScreen() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#f6f6f6", paddingTop: 12 }}>
-           <FlatList
+    <View style={{ flex: 1, backgroundColor: colors.background.primary }}>
+      <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.sm }}>
+        <SectionHeader
+          title={group.name?.trim()?.length ? group.name : "Group progress"}
+          subtitle="Track momentum across every member's goal."
+        />
+      </View>
+      <FlatList
         data={rows}
         keyExtractor={(r) => r.userId}
         renderItem={({ item }) => <ProgressRow row={item} />}
         ListEmptyComponent={
-          <View style={{ padding: 16 }}>
-            <Text style={{ opacity: 0.7 }}>No goals found yet for this group.</Text>
+          <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.sm }}>
+            <Text style={{ color: colors.text.muted }}>
+              No goals found yet for this group.
+            </Text>
           </View>
         }
-         contentContainerStyle={{ paddingBottom: 24 }}
+        contentContainerStyle={{ paddingBottom: spacing.xl }}
       />
-            <View
-              style={{
-                paddingHorizontal: 16,
-                paddingVertical: 12,
-                borderTopWidth: 1,
-                borderTopColor: "#e5e5e5",
-                backgroundColor: "#f6f6f6",
-              }}
-            >
-              <View style={{ flexDirection: "row", gap: 12 }}>
-                <Button title="Share invite code" onPress={shareInviteCode} style={{ flex: 1 }} />
-                <Button title="Leave group" onPress={confirmLeaveGroup} style={{ flex: 1 }} />
-              </View>
-            </View>
+      <View
+        style={{
+          paddingHorizontal: spacing.lg,
+          paddingVertical: spacing.md,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: colors.border.subtle,
+          backgroundColor: colors.background.primary,
+        }}
+      >
+        <View style={{ flexDirection: "row", gap: spacing.sm }}>
+          <Button title="Share invite code" onPress={shareInviteCode} style={{ flex: 1 }} />
+          <Button title="Leave group" onPress={confirmLeaveGroup} style={{ flex: 1 }} />
+        </View>
+      </View>
     </View>
   );
 }
 
 function ProgressRow({ row }: { row: Row }) {
+  const { colors, radius, spacing, typography } = useTheme();
   const pct = useMemo(() => (row.target ? clamp01(row.completed / row.target) : 0), [row.completed, row.target]);
   const totalTimeLabel = useMemo(() => formatDurationMinutes(row.totalDurationMinutes || 0), [row.totalDurationMinutes]);
   const reason = row.goalDateReason?.trim() || "Why is this date important?";
   const targetLabel = row.goalDateISO ? formatGoalDate(row.goalDateISO) : "No target date";
 
   return (
-    <Tile>
+    <Card style={{ marginHorizontal: spacing.lg, marginBottom: spacing.md }}>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" }}>
-        <Text style={{ fontSize: 16, fontWeight: "900" }}>{row.displayName}</Text>
-        <Text style={{ opacity: 0.7, fontWeight: "800" }}>
+        <Text style={{ fontSize: typography.size.md, fontWeight: typography.weight.bold, color: colors.text.primary }}>
+          {row.displayName}
+        </Text>
+        <Text style={{ color: colors.text.secondary, fontWeight: typography.weight.semibold }}>
           {row.completed} / {row.target || "—"}
         </Text>
       </View>
@@ -272,13 +286,19 @@ function ProgressRow({ row }: { row: Row }) {
       <View
         style={{
           position: "relative",
-          marginTop: 8,
-          marginBottom: 8,
-          minHeight: 22,
+          marginTop: spacing.sm,
+          marginBottom: spacing.sm,
+          minHeight: typography.lineHeight.normal,
           justifyContent: "center",
         }}
       >
-        <Text style={{ textAlign: "center", fontWeight: "700", opacity: row.goalDateReason ? 0.9 : 0.6 }}>
+        <Text
+          style={{
+            textAlign: "center",
+            fontWeight: typography.weight.medium,
+            color: row.goalDateReason ? colors.text.primary : colors.text.muted,
+          }}
+        >
           {reason}
         </Text>
         <View
@@ -286,36 +306,38 @@ function ProgressRow({ row }: { row: Row }) {
             position: "absolute",
             right: 0,
             top: 0,
-            paddingHorizontal: 10,
-            paddingVertical: 4,
-            borderRadius: 999,
-            backgroundColor: "#f3f3f3",
+            paddingHorizontal: spacing.sm,
+            paddingVertical: spacing.xs,
+            borderRadius: radius.pill,
+            backgroundColor: colors.surface.cardAlt,
           }}
         >
-          <Text style={{ fontSize: 12, fontWeight: "800" }}>{targetLabel}</Text>
+          <Text style={{ fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.text.secondary }}>
+            {targetLabel}
+          </Text>
         </View>
       </View>
 
       <View
         style={{
-          height: 10,
-          borderRadius: 999,
-          backgroundColor: "#e8e8e8",
-          marginTop: 10,
+          height: spacing.xs,
+          borderRadius: radius.pill,
+          backgroundColor: colors.surface.cardAlt,
+          marginTop: spacing.sm,
           overflow: "hidden",
         }}
       >
-        <View style={{ width: `${pct * 100}%`, height: "100%", backgroundColor: "#111" }} />
+        <View style={{ width: `${pct * 100}%`, height: "100%", backgroundColor: colors.accent.primary }} />
       </View>
 
-      <View style={{ marginTop: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <Text style={{ opacity: 0.6 }}>
+      <View style={{ marginTop: spacing.sm, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+        <Text style={{ color: colors.text.muted, fontSize: typography.size.xs }}>
           {row.target ? `${Math.round(pct * 100)}%` : "Set a target to track progress"}
         </Text>
-        <Text style={{ opacity: 0.6, fontWeight: "700" }}>
+        <Text style={{ color: colors.text.muted, fontSize: typography.size.xs, fontWeight: typography.weight.medium }}>
           Total Workout Time: {totalTimeLabel}
         </Text>
       </View>
-    </Tile>
+    </Card>
   );
 }

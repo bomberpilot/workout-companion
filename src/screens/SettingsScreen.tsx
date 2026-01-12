@@ -1,13 +1,17 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, Switch } from "react-native";
+import { Switch, Text, View } from "react-native";
 import { onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 
 import { useAuth } from "../auth/useAuth";
+import Card from "../components/ui/Card";
+import SectionHeader from "../components/ui/SectionHeader";
 import { userSettingsDoc } from "../firestore/paths";
 import type { UserSettings } from "../types/models";
+import { useTheme } from "../theme/ThemeProvider";
 
 export default function SettingsScreen() {
   const { user } = useAuth();
+  const { colors, spacing, typography } = useTheme();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
   useEffect(() => {
@@ -43,31 +47,27 @@ export default function SettingsScreen() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#f6f6f6", padding: 16 }}>
-      <Text style={{ fontSize: 22, fontWeight: "900" }}>Settings</Text>
-      <Text style={{ marginTop: 4, opacity: 0.6 }}>Manage your notification preferences.</Text>
+    <View style={{ flex: 1, backgroundColor: colors.background.primary, padding: spacing.lg }}>
+      <SectionHeader title="Settings" subtitle="Manage your notification preferences." />
 
-      <View
-        style={{
-          marginTop: 16,
-          backgroundColor: "white",
-          borderRadius: 16,
-          padding: 16,
-          borderWidth: 1,
-          borderColor: "#e6e6e6",
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <View style={{ flex: 1, paddingRight: 12 }}>
-          <Text style={{ fontWeight: "800", fontSize: 16 }}>Workout notifications</Text>
-          <Text style={{ marginTop: 6, opacity: 0.6 }}>
-            Get notified when group members log workouts.
-          </Text>
+      <Card style={{ marginTop: spacing.lg }}>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+          <View style={{ flex: 1, paddingRight: spacing.md }}>
+            <Text style={{ fontWeight: typography.weight.semibold, fontSize: typography.size.md, color: colors.text.primary }}>
+              Workout notifications
+            </Text>
+            <Text style={{ marginTop: spacing.xs, color: colors.text.muted }}>
+              Get notified when group members log workouts.
+            </Text>
+          </View>
+          <Switch
+            value={notificationsEnabled}
+            onValueChange={onToggleNotifications}
+            trackColor={{ false: colors.border.subtle, true: colors.accent.primaryMuted }}
+            thumbColor={notificationsEnabled ? colors.accent.primary : colors.surface.card}
+          />
         </View>
-        <Switch value={notificationsEnabled} onValueChange={onToggleNotifications} />
-      </View>
+      </Card>
     </View>
   );
 }

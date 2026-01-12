@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, FlatList, PanResponder, Pressable, Text, View } from "react-native";
+import { Alert, FlatList, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc } from "firebase/firestore";
@@ -7,11 +7,13 @@ import { doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDo
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { useAuth } from "../auth/useAuth";
 import { db } from "../config/firebase";
-import Tile from "../components/ui/Tile";
 import Button from "../components/ui/Button";
 import TextField from "../components/ui/TextField";
 import EditWorkoutModal from "../components/workout/EditWorkoutModal";
 import { groupMemberDoc, userWorkoutsCol } from "../firestore/paths";
+import Card from "../components/ui/Card";
+import SectionHeader from "../components/ui/SectionHeader";
+import { useTheme } from "../theme/ThemeProvider";
 
 type R = RouteProp<RootStackParamList, "MemberProfile">;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -69,6 +71,7 @@ export default function MemberProfileScreen() {
   const { params } = useRoute<R>();
   const nav = useNavigation<Nav>();
   const { user, initializing } = useAuth();
+  const { colors, radius, shadow, spacing, typography } = useTheme();
   const [displayName, setDisplayName] = useState(params.userId.slice(0, 6));
   const [groupNickname, setGroupNickname] = useState<string | null>(null);
   const [nickname, setNickname] = useState("");
@@ -336,34 +339,45 @@ export default function MemberProfileScreen() {
   ).current;
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#f6f6f6", paddingTop: 12 }}>
+    <View style={{ flex: 1, backgroundColor: colors.background.primary }}>
       <FlatList
         data={workouts}
         keyExtractor={(item) => item.id}
         ListHeaderComponent={
-          <View>
-            <Tile>
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                <Text style={{ fontSize: 18, fontWeight: "900" }}>{goalTitle}</Text>
-                {isSelf ? (
-                  <Pressable
-                    onPress={openMemberMenu}
-                    style={{ paddingHorizontal: 6, paddingVertical: 2 }}
-                    accessibilityLabel="Member options"
-                  >
-                    <Text style={{ fontSize: 22, fontWeight: "900" }}>⋯</Text>
-                  </Pressable>
-                ) : null}
-              </View>
-              <Text style={{ marginTop: 6, opacity: 0.65 }}>
-                Member summary for {goalTitle} in this group.
-              </Text>
-            </Tile>
+          <View style={{ paddingTop: spacing.lg }}>
+            <View style={{ paddingHorizontal: spacing.lg }}>
+              <SectionHeader
+                title={goalTitle}
+                subtitle={`Member summary for ${goalTitle} in this group.`}
+                action={
+                  isSelf ? (
+                    <Pressable
+                      onPress={openMemberMenu}
+                      style={({ pressed }) => ({
+                        paddingHorizontal: spacing.sm,
+                        paddingVertical: spacing.xs,
+                        borderRadius: spacing.md,
+                        backgroundColor: pressed ? colors.surface.cardAlt : colors.surface.card,
+                        borderWidth: StyleSheet.hairlineWidth,
+                        borderColor: colors.border.subtle,
+                      })}
+                      accessibilityLabel="Member options"
+                    >
+                      <Text style={{ fontSize: typography.size.xl, fontWeight: typography.weight.bold, color: colors.text.primary }}>
+                        ⋯
+                      </Text>
+                    </Pressable>
+                  ) : null
+                }
+              />
+            </View>
 
             {showNicknameEditor && isSelf ? (
-              <Tile>
-                <Text style={{ fontSize: 16, fontWeight: "900" }}>Your nickname in this group</Text>
-                <Text style={{ marginTop: 6, opacity: 0.7 }}>
+              <Card style={{ marginTop: spacing.md, marginHorizontal: spacing.lg }}>
+                <Text style={{ fontSize: typography.size.md, fontWeight: typography.weight.bold, color: colors.text.primary }}>
+                  Your nickname in this group
+                </Text>
+                <Text style={{ marginTop: spacing.xs, color: colors.text.muted }}>
                   This nickname will show in chat and progress lists for this group.
                 </Text>
                 <TextField
@@ -380,13 +394,13 @@ export default function MemberProfileScreen() {
                   onPress={saveNickname}
                   disabled={savingNickname}
                 />
-              </Tile>
+              </Card>
             ) : null}
 
             {goals.length === 0 ? (
-              <Tile>
-                <Text style={{ opacity: 0.7 }}>No goals found yet for this group.</Text>
-              </Tile>
+              <Card style={{ marginTop: spacing.md, marginHorizontal: spacing.lg }}>
+                <Text style={{ color: colors.text.muted }}>No goals found yet for this group.</Text>
+              </Card>
             ) : null}
 
             <View
@@ -404,13 +418,13 @@ export default function MemberProfileScreen() {
                     }}
                     style={{ opacity: isDragging ? 0 : 1 }}
                   >
-                    {renderGoalTile({
-                      goal,
-                      completedWorkouts: goal.displayCompletedWorkouts,
-                      isSelf,
-                      onLongPress: () => startGoalDrag(goal),
-                      onMenuPress: () => openGoalMenu(goal.id),
-                    })}
+                    <GoalTile
+                      goal={goal}
+                      completedWorkouts={goal.displayCompletedWorkouts}
+                      isSelf={isSelf}
+                      onLongPress={() => startGoalDrag(goal)}
+                      onMenuPress={() => openGoalMenu(goal.id)}
+                    />
                   </View>
                 );
               })}
@@ -424,55 +438,40 @@ export default function MemberProfileScreen() {
                     right: 0,
                     top: dragPosition.current,
                     zIndex: 10,
-                    shadowColor: "#000",
-                    shadowOpacity: 0.15,
-                    shadowRadius: 10,
-                    shadowOffset: { width: 0, height: 6 },
-                    elevation: 6,
+                    paddingHorizontal: spacing.lg,
                   }}
                 >
-                  {renderGoalTile({
-                    goal: draggingGoal,
-                    completedWorkouts: draggingGoal.displayCompletedWorkouts,
-                    isSelf,
-                    onLongPress: () => {},
-                    onMenuPress: () => openGoalMenu(draggingGoal.id),
-                  })}
+                  <GoalTile
+                    goal={draggingGoal}
+                    completedWorkouts={draggingGoal.displayCompletedWorkouts}
+                    isSelf={isSelf}
+                    onLongPress={() => {}}
+                    onMenuPress={() => openGoalMenu(draggingGoal.id)}
+                    style={shadow.md}
+                  />
                 </View>
               ) : null}
             </View>
 
             {isSelf ? (
-              <View style={{ paddingHorizontal: 16 }}>
+              <View style={{ paddingHorizontal: spacing.lg, marginTop: spacing.md }}>
                 <Button title="Add a goal" onPress={() => nav.navigate("GoalSetup", { groupId: params.groupId })} />
               </View>
             ) : null}
 
-            <View style={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4 }}>
-              <Text style={{ fontSize: 16, fontWeight: "900" }}>Workout summaries</Text>
+            <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.sm }}>
+              <SectionHeader title="Workout summaries" subtitle="Recent sessions and notes." />
             </View>
           </View>
         }
         renderItem={({ item }) => (
-          <Tile>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <Text style={{ fontWeight: "900" }}>{formatWorkoutTitle(item)}</Text>
-              {isSelf ? (
-                <Pressable
-                  onPress={() => openWorkoutMenu(item)}
-                  style={{ paddingHorizontal: 6, paddingVertical: 2 }}
-                  accessibilityLabel="Workout options"
-                >
-                  <Text style={{ fontSize: 22, fontWeight: "900" }}>⋯</Text>
-                </Pressable>
-              ) : null}
-            </View>
-            {formatWorkoutMeta(item) ? (
-              <Text style={{ marginTop: 6, opacity: 0.7 }}>{formatWorkoutMeta(item)}</Text>
-            ) : null}
-            {item.notes ? <Text style={{ marginTop: 6, opacity: 0.85 }}>{String(item.notes)}</Text> : null}
-          </Tile>
+          <WorkoutTile
+            workout={item}
+            isSelf={isSelf}
+            onMenuPress={() => openWorkoutMenu(item)}
+          />
         )}
+        contentContainerStyle={{ paddingBottom: spacing.xl }}
       />
 
       <EditWorkoutModal
@@ -548,33 +547,56 @@ function parseISOToUTCDate(iso: string) {
   return new Date(Date.UTC(y, mo - 1, da));
 }
 
-function renderGoalTile({
+function GoalTile({
   goal,
   completedWorkouts,
   isSelf,
   onLongPress,
   onMenuPress,
+  style,
 }: {
   goal: GoalEntry;
   completedWorkouts: number;
   isSelf: boolean;
   onLongPress: () => void;
   onMenuPress: () => void;
+  style?: object;
 }) {
+  const { colors, radius, spacing, typography } = useTheme();
   const ratio = goal.targetWorkouts ? Math.min(1, completedWorkouts / goal.targetWorkouts) : 0;
   const reason = goal.goalDateReason?.trim() || "Why is this date important?";
   const targetLabel = goal.goalDateISO ? formatGoalDate(goal.goalDateISO) : "No target date";
 
   return (
-    <Tile>
-      <Pressable onLongPress={onLongPress} delayLongPress={250}>
+    <Pressable
+      onLongPress={onLongPress}
+      delayLongPress={250}
+      style={({ pressed }) => ({
+        marginHorizontal: spacing.lg,
+        marginBottom: spacing.md,
+        opacity: pressed ? 0.92 : 1,
+      })}
+    >
+      <Card style={style}>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-          <Text style={{ fontWeight: "800" }}>
+          <Text style={{ fontWeight: typography.weight.semibold, color: colors.text.primary }}>
             Progress: {completedWorkouts} / {goal.targetWorkouts || "—"}
           </Text>
           {isSelf ? (
-            <Pressable onPress={onMenuPress} style={{ paddingHorizontal: 6, paddingVertical: 2 }}>
-              <Text style={{ fontSize: 22, fontWeight: "900" }}>⋯</Text>
+            <Pressable
+              onPress={onMenuPress}
+              style={({ pressed }) => ({
+                paddingHorizontal: spacing.sm,
+                paddingVertical: spacing.xs,
+                borderRadius: spacing.md,
+                backgroundColor: pressed ? colors.surface.cardAlt : colors.surface.card,
+                borderWidth: StyleSheet.hairlineWidth,
+                borderColor: colors.border.subtle,
+              })}
+            >
+              <Text style={{ fontSize: typography.size.xl, fontWeight: typography.weight.bold, color: colors.text.primary }}>
+                ⋯
+              </Text>
             </Pressable>
           ) : null}
         </View>
@@ -582,13 +604,19 @@ function renderGoalTile({
         <View
           style={{
             position: "relative",
-            marginTop: 8,
-            marginBottom: 8,
-            minHeight: 22,
+            marginTop: spacing.sm,
+            marginBottom: spacing.sm,
+            minHeight: typography.lineHeight.normal,
             justifyContent: "center",
           }}
         >
-          <Text style={{ textAlign: "center", fontWeight: "700", opacity: goal.goalDateReason ? 0.9 : 0.6 }}>
+          <Text
+            style={{
+              textAlign: "center",
+              fontWeight: typography.weight.medium,
+              color: goal.goalDateReason ? colors.text.primary : colors.text.muted,
+            }}
+          >
             {reason}
           </Text>
           <View
@@ -596,28 +624,78 @@ function renderGoalTile({
               position: "absolute",
               right: 0,
               top: 0,
-              paddingHorizontal: 10,
-              paddingVertical: 4,
-              borderRadius: 999,
-              backgroundColor: "#f3f3f3",
+              paddingHorizontal: spacing.sm,
+              paddingVertical: spacing.xs,
+              borderRadius: radius.pill,
+              backgroundColor: colors.surface.cardAlt,
             }}
           >
-            <Text style={{ fontSize: 12, fontWeight: "800" }}>{targetLabel}</Text>
+            <Text style={{ fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.text.secondary }}>
+              {targetLabel}
+            </Text>
           </View>
         </View>
 
         <View
           style={{
-            height: 10,
-            borderRadius: 999,
-            backgroundColor: "#e8e8e8",
+            height: spacing.xs,
+            borderRadius: radius.pill,
+            backgroundColor: colors.surface.cardAlt,
             overflow: "hidden",
           }}
         >
-          <View style={{ width: `${ratio * 100}%`, height: "100%", backgroundColor: "#111" }} />
+          <View style={{ width: `${ratio * 100}%`, height: "100%", backgroundColor: colors.accent.primary }} />
         </View>
-      </Pressable>
-    </Tile>
+      </Card>
+    </Pressable>
+  );
+}
+
+function WorkoutTile({
+  workout,
+  isSelf,
+  onMenuPress,
+}: {
+  workout: WorkoutRow;
+  isSelf: boolean;
+  onMenuPress: () => void;
+}) {
+  const { colors, spacing, typography } = useTheme();
+  return (
+    <Card style={{ marginHorizontal: spacing.lg, marginBottom: spacing.md }}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+        <Text style={{ fontWeight: typography.weight.semibold, color: colors.text.primary }}>
+          {formatWorkoutTitle(workout)}
+        </Text>
+        {isSelf ? (
+          <Pressable
+            onPress={onMenuPress}
+            style={({ pressed }) => ({
+              paddingHorizontal: spacing.sm,
+              paddingVertical: spacing.xs,
+              borderRadius: spacing.md,
+              backgroundColor: pressed ? colors.surface.cardAlt : colors.surface.card,
+              borderWidth: StyleSheet.hairlineWidth,
+              borderColor: colors.border.subtle,
+            })}
+          >
+            <Text style={{ fontSize: typography.size.xl, fontWeight: typography.weight.bold, color: colors.text.primary }}>
+              ⋯
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+      {formatWorkoutMeta(workout) ? (
+        <Text style={{ marginTop: spacing.xs, color: colors.text.muted }}>
+          {formatWorkoutMeta(workout)}
+        </Text>
+      ) : null}
+      {workout.notes ? (
+        <Text style={{ marginTop: spacing.xs, color: colors.text.secondary }}>
+          {String(workout.notes)}
+        </Text>
+      ) : null}
+    </Card>
   );
 }
 

@@ -1,16 +1,19 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, Alert } from "react-native";
+import { Alert, Text, View } from "react-native";
 import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 
 import { useAuth } from "../auth/useAuth";
 import { auth, db } from "../config/firebase";
-import Tile from "../components/ui/Tile";
 import TextField from "../components/ui/TextField";
 import Button from "../components/ui/Button";
+import Card from "../components/ui/Card";
+import SectionHeader from "../components/ui/SectionHeader";
+import { useTheme } from "../theme/ThemeProvider";
 
 export default function ProfileScreen() {
   const { user } = useAuth();
+  const { colors, spacing, typography } = useTheme();
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
 
@@ -50,23 +53,39 @@ export default function ProfileScreen() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#f6f6f6", padding: 16 }}>
-      <Tile>
-        <Text style={{ fontSize: 20, fontWeight: "900" }}>Profile</Text>
-        <Text style={{ opacity: 0.7, marginTop: 6 }}>
-          This name is what your friends will see in chat.
-        </Text>
+    <View style={{ flex: 1, backgroundColor: colors.background.primary, padding: spacing.lg }}>
+      <SectionHeader title="Profile" subtitle="This name is what your friends will see in chat." />
 
-        <TextField label="Display name" value={displayName} onChangeText={setDisplayName} placeholder="Chief" />
+      <Card style={{ marginTop: spacing.lg }}>
+        <TextField
+          label="Display name"
+          value={displayName}
+          onChangeText={setDisplayName}
+          placeholder="Chief"
+        />
 
-        <View style={{ marginTop: 10 }}>
-          <Text style={{ fontWeight: "800", opacity: 0.7 }}>Signed in as</Text>
-          <Text style={{ marginTop: 4, fontWeight: "900" }}>{email || "—"}</Text>
+        <View style={{ marginTop: spacing.md }}>
+          <Text style={{ fontWeight: typography.weight.semibold, color: colors.text.muted }}>
+            Signed in as
+          </Text>
+          <Text
+            style={{
+              marginTop: spacing.xs,
+              fontWeight: typography.weight.bold,
+              color: colors.text.primary,
+            }}
+          >
+            {email || "—"}
+          </Text>
         </View>
 
-        <Button title="Save" onPress={save} />
-        <Button title="Sign out" onPress={doSignOut} />
-      </Tile>
+        <View style={{ marginTop: spacing.lg }}>
+          <Button title="Save" onPress={save} />
+        </View>
+        <View style={{ marginTop: spacing.sm }}>
+          <Button title="Sign out" onPress={doSignOut} variant="secondary" />
+        </View>
+      </Card>
     </View>
   );
 }
