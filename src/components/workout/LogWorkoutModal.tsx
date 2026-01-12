@@ -6,6 +6,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   View,
 } from "react-native";
@@ -15,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Button from "../ui/Button";
 import TextField from "../ui/TextField";
 import { logWorkoutFromGroupChat, logWorkoutToAllGroups } from "../../firestore/actions";
+import { useTheme } from "../../theme/ThemeProvider";
 
 type Props = {
   visible: boolean;
@@ -64,6 +66,7 @@ export default function LogWorkoutModal({
   const isContextual = !!groupId;
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView | null>(null);
+  const { colors, radius, shadow, spacing, typography } = useTheme();
 
   const [activityTypes, setActivityTypes] = useState<string[]>([]);
   const [hours, setHours] = useState<string>("0");
@@ -183,16 +186,11 @@ export default function LogWorkoutModal({
   }
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={handleClose}
-    >
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
       <View
         style={{
           flex: 1,
-          backgroundColor: "rgba(0,0,0,0.35)",
+          backgroundColor: colors.overlay.scrim,
           justifyContent: "flex-end",
         }}
       >
@@ -203,35 +201,42 @@ export default function LogWorkoutModal({
         >
           <View
             style={{
-              backgroundColor: "white",
-              borderTopLeftRadius: 26,
-              borderTopRightRadius: 26,
-              paddingHorizontal: 16,
-              paddingTop: 14,
-              paddingBottom: Math.max(18, insets.bottom + 12),
+              backgroundColor: colors.surface.modal,
+              borderTopLeftRadius: radius.xl,
+              borderTopRightRadius: radius.xl,
+              paddingHorizontal: spacing.lg,
+              paddingTop: spacing.md,
+              paddingBottom: Math.max(spacing.lg, insets.bottom + spacing.sm),
               maxHeight: "92%",
+              ...shadow.md,
             }}
           >
             {/* Header */}
             <View
               style={{
                 alignItems: "center",
-                paddingBottom: 10,
+                paddingBottom: spacing.sm,
               }}
             >
               <View
                 style={{
-                  width: 44,
-                  height: 5,
-                  borderRadius: 999,
-                  backgroundColor: "#e6e6e6",
-                  marginBottom: 10,
+                  width: spacing["2xl"],
+                  height: spacing.xs,
+                  borderRadius: radius.pill,
+                  backgroundColor: colors.border.subtle,
+                  marginBottom: spacing.sm,
                 }}
               />
-              <Text style={{ fontSize: 18, fontWeight: "900" }}>
+              <Text
+                style={{
+                  fontSize: typography.size.lg,
+                  fontWeight: typography.weight.bold,
+                  color: colors.text.primary,
+                }}
+              >
                 Log workout
               </Text>
-              <Text style={{ marginTop: 4, opacity: 0.6 }}>
+              <Text style={{ marginTop: spacing.xs, color: colors.text.muted }}>
                 {isContextual ? "Posts to this group" : "Posts to all groups"}
               </Text>
             </View>
@@ -239,11 +244,18 @@ export default function LogWorkoutModal({
             <ScrollView
               ref={scrollRef}
               keyboardShouldPersistTaps="handled"
-              contentContainerStyle={{ paddingBottom: Math.max(40, insets.bottom + 40) }}
+              contentContainerStyle={{ paddingBottom: Math.max(spacing.xl, insets.bottom + spacing.xl) }}
               showsVerticalScrollIndicator={false}
             >
               {/* Activity multi-select */}
-              <Text style={{ fontWeight: "900", marginTop: 6, marginBottom: 10 }}>
+              <Text
+                style={{
+                  fontWeight: typography.weight.bold,
+                  marginTop: spacing.xs,
+                  marginBottom: spacing.sm,
+                  color: colors.text.primary,
+                }}
+              >
                 Activities
               </Text>
 
@@ -254,21 +266,25 @@ export default function LogWorkoutModal({
                     <Pressable
                       key={label}
                       onPress={() => toggleActivity(label)}
-                      style={{
-                        paddingVertical: 10,
-                        paddingHorizontal: 12,
-                        borderRadius: 999,
-                        borderWidth: 1,
-                        borderColor: selected ? "#111" : "#e6e6e6",
-                        backgroundColor: selected ? "#111" : "white",
-                        marginRight: 10,
-                        marginBottom: 10,
-                      }}
+                      style={({ pressed }) => ({
+                        paddingVertical: spacing.sm,
+                        paddingHorizontal: spacing.md,
+                        borderRadius: radius.pill,
+                        borderWidth: StyleSheet.hairlineWidth,
+                        borderColor: selected ? colors.accent.primary : colors.border.subtle,
+                        backgroundColor: selected
+                          ? colors.accent.primary
+                          : pressed
+                            ? colors.surface.cardAlt
+                            : colors.surface.card,
+                        marginRight: spacing.sm,
+                        marginBottom: spacing.sm,
+                      })}
                     >
                       <Text
                         style={{
-                          fontWeight: "900",
-                          color: selected ? "white" : "#111",
+                          fontWeight: typography.weight.semibold,
+                          color: selected ? colors.accent.onAccent : colors.text.primary,
                         }}
                       >
                         {label}
@@ -279,13 +295,26 @@ export default function LogWorkoutModal({
               </View>
 
               {/* Duration */}
-              <Text style={{ fontWeight: "900", marginTop: 8, marginBottom: 10 }}>
+              <Text
+                style={{
+                  fontWeight: typography.weight.bold,
+                  marginTop: spacing.sm,
+                  marginBottom: spacing.sm,
+                  color: colors.text.primary,
+                }}
+              >
                 Duration
               </Text>
 
-              <View style={{ flexDirection: "row", gap: 12 }}>
+              <View style={{ flexDirection: "row", gap: spacing.sm }}>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontWeight: "800", opacity: 0.7, marginBottom: 6 }}>
+                  <Text
+                    style={{
+                      fontWeight: typography.weight.medium,
+                      color: colors.text.muted,
+                      marginBottom: spacing.xs,
+                    }}
+                  >
                     Hours
                   </Text>
                   <TextField
@@ -297,7 +326,13 @@ export default function LogWorkoutModal({
                 </View>
 
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontWeight: "800", opacity: 0.7, marginBottom: 6 }}>
+                  <Text
+                    style={{
+                      fontWeight: typography.weight.medium,
+                      color: colors.text.muted,
+                      marginBottom: spacing.xs,
+                    }}
+                  >
                     Minutes
                   </Text>
                   <TextField
@@ -309,16 +344,29 @@ export default function LogWorkoutModal({
                 </View>
               </View>
 
-              <Text style={{ marginTop: 8, opacity: 0.65 }}>
+              <Text style={{ marginTop: spacing.sm, color: colors.text.muted }}>
                 Total: {Math.floor(durationMinutes / 60)}h {durationMinutes % 60}m
               </Text>
 
               {/* Date */}
-              <Text style={{ fontWeight: "900", marginTop: 16, marginBottom: 10 }}>
+              <Text
+                style={{
+                  fontWeight: typography.weight.bold,
+                  marginTop: spacing.lg,
+                  marginBottom: spacing.sm,
+                  color: colors.text.primary,
+                }}
+              >
                 Workout date
               </Text>
 
-              <Text style={{ fontWeight: "800", opacity: 0.7, marginBottom: 6 }}>
+              <Text
+                style={{
+                  fontWeight: typography.weight.medium,
+                  color: colors.text.muted,
+                  marginBottom: spacing.xs,
+                }}
+              >
                 Type date (YYYY-MM-DD)
               </Text>
               <TextField
@@ -333,7 +381,7 @@ export default function LogWorkoutModal({
                 autoCorrect={false}
               />
 
-              <View style={{ height: 10 }} />
+              <View style={{ height: spacing.sm }} />
 
               <Button
                 title={showPicker ? "Hide calendar" : "Pick from calendar"}
@@ -343,7 +391,7 @@ export default function LogWorkoutModal({
               />
 
               {showPicker ? (
-                <View style={{ marginTop: 10 }}>
+                <View style={{ marginTop: spacing.sm }}>
                   <DateTimePicker
                     value={workoutDate}
                     mode="date"
@@ -358,7 +406,14 @@ export default function LogWorkoutModal({
               ) : null}
 
               {/* Global Notes */}
-              <Text style={{ fontWeight: "900", marginTop: 18, marginBottom: 10 }}>
+              <Text
+                style={{
+                  fontWeight: typography.weight.bold,
+                  marginTop: spacing.xl,
+                  marginBottom: spacing.sm,
+                  color: colors.text.primary,
+                }}
+              >
                 Notes (saved to your workout)
               </Text>
 
@@ -373,7 +428,14 @@ export default function LogWorkoutModal({
               {/* Group-only caption (contextual) */}
               {isContextual ? (
                 <>
-                  <Text style={{ fontWeight: "900", marginTop: 18, marginBottom: 10 }}>
+                  <Text
+                    style={{
+                      fontWeight: typography.weight.bold,
+                      marginTop: spacing.xl,
+                      marginBottom: spacing.sm,
+                      color: colors.text.primary,
+                    }}
+                  >
                     Group caption (saved only to this group chat)
                   </Text>
 
@@ -388,27 +450,18 @@ export default function LogWorkoutModal({
               ) : null}
 
               {/* Actions */}
-              <View style={{ height: 16 }} />
+              <View style={{ height: spacing.md }} />
 
-              <View style={{ flexDirection: "row", gap: 12 }}>
+              <View style={{ flexDirection: "row", gap: spacing.sm }}>
                 <View style={{ flex: 1 }}>
-                  <Button
-                    title="Cancel"
-                    onPress={handleClose}
-                    variant="secondary"
-                    disabled={busy}
-                  />
+                  <Button title="Cancel" onPress={handleClose} variant="secondary" disabled={busy} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Button
-                    title={busy ? "Saving..." : "Save"}
-                    onPress={onSubmit}
-                    disabled={busy}
-                  />
+                  <Button title={busy ? "Saving..." : "Save"} onPress={onSubmit} disabled={busy} />
                 </View>
               </View>
 
-              <View style={{ height: 10 }} />
+              <View style={{ height: spacing.sm }} />
             </ScrollView>
           </View>
         </KeyboardAvoidingView>

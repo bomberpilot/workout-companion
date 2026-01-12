@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  FlatList,
   Alert,
+  FlatList,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -31,6 +32,8 @@ import MessageTile from "../components/chat/MessageTile";
 import ComposerBar from "../components/chat/ComposerBar";
 import LogWorkoutModal from "../components/workout/LogWorkoutModal";
 import { useTheme } from "../theme/ThemeProvider";
+import Card from "../components/ui/Card";
+import PrimaryActionButton from "../components/ui/PrimaryActionButton";
 
 type R = RouteProp<RootStackParamList, "Chat">;
 type Nav = NativeStackNavigationProp<RootStackParamList, "Chat">;
@@ -51,7 +54,7 @@ export default function GroupChatScreen() {
   const nav = useNavigation<Nav>();
   const { user, initializing } = useAuth();
   const headerHeight = useHeaderHeight();
-  const { colors } = useTheme();
+  const { colors, radius, spacing, typography } = useTheme();
 
   const [group, setGroup] = useState<GroupMeta>({});
   const [messages, setMessages] = useState<any[]>([]);
@@ -75,9 +78,22 @@ export default function GroupChatScreen() {
       headerLeft: () => (
         <Pressable
           onPress={() => nav.navigate("GroupProgress", { groupId: params.groupId })}
-          style={{ paddingHorizontal: 10, paddingVertical: 6 }}
+          style={({ pressed }) => ({
+            paddingHorizontal: spacing.sm,
+            paddingVertical: spacing.xs,
+            borderRadius: radius.md,
+            backgroundColor: pressed ? colors.surface.cardAlt : colors.background.primary,
+          })}
         >
-          <Text style={{ fontWeight: "900" }}>Group Progress</Text>
+          <Text
+            style={{
+              color: colors.text.primary,
+              fontWeight: typography.weight.semibold,
+              fontSize: typography.size.sm,
+            }}
+          >
+            Group Progress
+          </Text>
         </Pressable>
       ),
       headerRight: () => (
@@ -88,18 +104,29 @@ export default function GroupChatScreen() {
               nav.navigate("MemberProfile", { groupId: params.groupId, userId: user.uid });
             }}
             disabled={!user}
-            style={{ paddingHorizontal: 8, paddingVertical: 6, opacity: user ? 1 : 0.5 }}
+            style={({ pressed }) => ({
+              paddingHorizontal: spacing.sm,
+              paddingVertical: spacing.xs,
+              opacity: user ? (pressed ? 0.7 : 1) : 0.5,
+            })}
           >
             <Ionicons
               name={isProfileActive ? "person" : "person-outline"}
-              size={24}
+              size={typography.size.xl}
               color={isProfileActive ? activeColor : inactiveColor}
             />
           </Pressable>
-          <Pressable onPress={() => nav.navigate("Home")} style={{ paddingHorizontal: 8, paddingVertical: 6 }}>
+          <Pressable
+            onPress={() => nav.navigate("Home")}
+            style={({ pressed }) => ({
+              paddingHorizontal: spacing.sm,
+              paddingVertical: spacing.xs,
+              opacity: pressed ? 0.7 : 1,
+            })}
+          >
             <Ionicons
               name={isHomeActive ? "home" : "home-outline"}
-              size={24}
+              size={typography.size.xl}
               color={isHomeActive ? activeColor : inactiveColor}
             />
           </Pressable>
@@ -281,25 +308,34 @@ export default function GroupChatScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: "#f6f6f6" }}
+      style={{ flex: 1, backgroundColor: colors.background.primary }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={headerHeight}
     >
       <View style={{ flex: 1 }}>
-        <View style={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 6 }}>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "baseline" }}>
-            <Text style={{ fontSize: 12, opacity: 0.7 }}>Invite code: </Text>
-            <Text style={{ fontSize: 12, fontWeight: "900" }} selectable>
-              {group.inviteCode ?? "—"}
-            </Text>
-          </View>
+        <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xs }}>
+          <Card style={{ padding: spacing.md }}>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "baseline" }}>
+              <Text style={{ fontSize: typography.size.xs, color: colors.text.muted }}>Invite code: </Text>
+              <Text
+                style={{
+                  fontSize: typography.size.xs,
+                  fontWeight: typography.weight.semibold,
+                  color: colors.text.primary,
+                }}
+                selectable
+              >
+                {group.inviteCode ?? "—"}
+              </Text>
+            </View>
+          </Card>
         </View>
 
         <FlatList
           data={messagesWithDetails}
           inverted
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingBottom: 220 }}
+          contentContainerStyle={{ paddingBottom: spacing["3xl"] * 4 }} // Reserve space for composer + primary action.
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           renderItem={({ item }) => {
@@ -322,24 +358,20 @@ export default function GroupChatScreen() {
 
         <View
           style={{
-            paddingHorizontal: 12,
-            paddingBottom: 12,
-            backgroundColor: "#f6f6f6",
+            paddingHorizontal: spacing.lg,
+            paddingBottom: spacing.lg,
+            backgroundColor: colors.background.primary,
+            borderTopWidth: StyleSheet.hairlineWidth,
+            borderTopColor: colors.border.subtle,
           }}
         >
-          <ComposerBar onSendText={sendText} containerStyle={{ padding: 0, backgroundColor: "transparent" }} />
-          <Pressable
-            onPress={() => setShowLog(true)}
-            style={{
-              backgroundColor: "#111",
-              borderRadius: 18,
-              paddingVertical: 16,
-              alignItems: "center",
-              marginTop: 10,
-            }}
-          >
-            <Text style={{ color: "white", fontWeight: "900", fontSize: 16 }}>Log workout</Text>
-          </Pressable>
+          <ComposerBar
+            onSendText={sendText}
+            containerStyle={{ padding: 0, backgroundColor: colors.background.primary }}
+          />
+          <View style={{ marginTop: spacing.md }}>
+            <PrimaryActionButton title="Log workout" onPress={() => setShowLog(true)} />
+          </View>
         </View>
       </View>
 

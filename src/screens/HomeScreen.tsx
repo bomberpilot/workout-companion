@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, FlatList, Dimensions, Pressable, Alert, NativeSyntheticEvent, NativeScrollEvent } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { Alert, Dimensions, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
@@ -27,10 +27,12 @@ import {
   userSettingsDoc,
 } from "../firestore/paths";
 import LogWorkoutModal from "../components/workout/LogWorkoutModal";
-import GoalTile from "../components/home/GoalTile";
 import { db } from "../config/firebase";
 import type { AppNotification, UserSettings } from "../types/models";
 import { useTheme } from "../theme/ThemeProvider";
+import Card from "../components/ui/Card";
+import SectionHeader from "../components/ui/SectionHeader";
+import PrimaryActionButton from "../components/ui/PrimaryActionButton";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "Home">;
 
@@ -45,12 +47,11 @@ type GoalCard = {
 export default function HomeScreen() {
   const nav = useNavigation<Nav>();
   const { user } = useAuth();
-  const { colors } = useTheme();
+  const { colors, radius, spacing, typography } = useTheme();
 
   const [cards, setCards] = useState<GoalCard[]>([]);
   const [showLog, setShowLog] = useState(false);
   const [globalCompleted, setGlobalCompleted] = useState(0);
-  const [activeIndex, setActiveIndex] = useState(0);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
@@ -156,11 +157,7 @@ export default function HomeScreen() {
       return;
     }
 
-    const qy = query(
-      userNotificationsCol(user.uid),
-      orderBy("createdAt", "desc"),
-      limit(10)
-    );
+    const qy = query(userNotificationsCol(user.uid), orderBy("createdAt", "desc"), limit(10));
     const unsub = onSnapshot(
       qy,
       (snap) => {
@@ -198,25 +195,6 @@ export default function HomeScreen() {
     }
   }
 
-  const width = Dimensions.get("window").width;
-
-  // Two tiles visible at once, with margins and spacing
-  const sidePadding = 16;
-  const tileGap = 12;
-  const tileWidth = useMemo(() => {
-    const usable = width - sidePadding * 2 - tileGap; // 2 tiles + 1 gap
-    return Math.floor(usable / 2);
-  }, [width]);
-
-  const snapInterval = useMemo(() => tileWidth + tileGap, [tileWidth]);
-  const listRef = useRef<FlatList<GoalCard>>(null);
-
-  function onScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
-    const x = e.nativeEvent.contentOffset.x;
-    const idx = Math.round(x / snapInterval);
-    if (idx !== activeIndex) setActiveIndex(idx);
-  }
-
   async function refreshWorkoutCount() {
     if (!user) return;
     try {
@@ -227,183 +205,295 @@ export default function HomeScreen() {
     }
   }
 
+  const width = Dimensions.get("window").width;
+  const sidePadding = spacing.xl;
+  const tileGap = spacing.sm;
+  const tileWidth = useMemo(() => {
+    const usable = width - sidePadding * 2 - tileGap;
+    return Math.floor(usable / 2);
+  }, [sidePadding, tileGap, width]);
+
+  const primaryGoal = useMemo(() => cards.find((card) => card.targetWorkouts) ?? cards[0], [cards]);
+  const targetWorkouts = primaryGoal?.targetWorkouts ?? 0;
+  const progressRatio = targetWorkouts ? globalCompleted / targetWorkouts : 0;
+  const progressLabel = targetWorkouts
+    ? `${globalCompleted} of ${targetWorkouts} workouts`
+    : "Set a goal to start tracking momentum";
+
+  const visibleNotifications = notifications.slice(0, 2); // Keep height stable for the no-scroll layout.
+  const remainingNotifications = notifications.length - visibleNotifications.length;
+
   return (
-    <View style={{ flex: 1, backgroundColor: "#f6f6f6" }}>
-      <View style={{ padding: sidePadding, paddingBottom: 8 }}>
-        <Text style={{ fontSize: 22, fontWeight: "900" }}>Your Groups</Text>
-        <Text style={{ opacity: 0.7, marginTop: 4 }}>Scroll sideways. Tap a tile to enter the group.</Text>
-      </View>
-
-      <FlatList
-        ref={listRef}
-        data={cards}
-        horizontal
-        keyExtractor={(i) => i.groupId}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: sidePadding }}
-        snapToInterval={snapInterval}
-        decelerationRate="fast"
-        bounces={cards.length > 1}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
-        renderItem={({ item, index }) => {
-          const subtitle = item.inviteCode ? `Invite: ${item.inviteCode}` : "Invite: —";
-          const target = item.targetWorkouts ?? 0;
-          const progressRatio = target ? globalCompleted / target : 0;
-          const progressText = target ? `Progress: ${globalCompleted}/${target}` : "Set your goal";
-
-          // Add gap spacing between tiles
-          const isLeftTile = index % 2 === 0;
-          const marginRight = isLeftTile ? tileGap : 0;
-
-          return (
-            <View style={{ width: tileWidth, marginRight }}>
-              <GoalTile
-                width={tileWidth}
-                title={item.groupName}
-                subtitle={subtitle}
-                progressText={progressText}
-                progressRatio={progressRatio}
-                goalDateISO={item.goalDateISO}
-                onPress={() => nav.navigate("Chat", { groupId: item.groupId })}
-              />
-            </View>
-          );
-        }}
-        ListEmptyComponent={
-          <View style={{ paddingHorizontal: sidePadding, paddingTop: 12 }}>
-            <Text style={{ opacity: 0.7 }}>No goals yet. Create or join a group to start.</Text>
-          </View>
-        }
-      />
-
-      {/* Dots like Instagram */}
-      {cards.length > 1 ? (
-        <View style={{ flexDirection: "row", justifyContent: "center", gap: 8, paddingTop: 4 }}>
-          {Array.from({ length: Math.max(1, Math.ceil(cards.length / 2)) }).map((_, i) => {
-            const active = i === activeIndex;
-            return (
+    <View style={{ flex: 1, backgroundColor: colors.background.primary }}>
+      <View style={{ flex: 1, paddingHorizontal: sidePadding, paddingTop: spacing.xl, paddingBottom: spacing.lg }}>
+        <View style={{ marginBottom: spacing.xl }}>
+          <SectionHeader title="Momentum" subtitle="Stay calm and consistent—small steps add up." />
+          <Card style={{ marginTop: spacing.md }}>
+            <Text style={{ color: colors.text.primary, fontSize: typography.size.lg, fontWeight: typography.weight.bold }}>
+              {progressLabel}
+            </Text>
+            <Text
+              style={{
+                marginTop: spacing.xs,
+                color: colors.text.muted,
+                fontSize: typography.size.sm,
+                lineHeight: typography.lineHeight.relaxed,
+              }}
+            >
+              {targetWorkouts ? "Momentum is based on your primary group goal." : "Choose a group goal to see progress."}
+            </Text>
+            <View
+              style={{
+                marginTop: spacing.lg,
+                height: spacing.xs,
+                borderRadius: radius.pill,
+                backgroundColor: colors.surface.cardAlt,
+                overflow: "hidden",
+              }}
+            >
               <View
-                key={i}
                 style={{
-                  width: active ? 18 : 7,
-                  height: 7,
-                  borderRadius: 999,
-                  backgroundColor: active ? "#111" : "#cfcfcf",
+                  width: `${Math.max(0, Math.min(1, progressRatio)) * 100}%`,
+                  height: "100%",
+                  backgroundColor: colors.accent.primary,
+                  borderRadius: radius.pill,
                 }}
               />
-            );
-          })}
-        </View>
-      ) : null}
+            </View>
+          </Card>
 
-      <View style={{ paddingHorizontal: sidePadding, paddingTop: 16 }}>
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-          <Text style={{ fontSize: 18, fontWeight: "900" }}>Recent Activity</Text>
-          <Pressable
-            onPress={dismissAllNotifications}
-            disabled={!notifications.length || !notificationsEnabled}
-            style={({ pressed }) => ({
-              opacity: !notifications.length || !notificationsEnabled ? 0.35 : pressed ? 0.6 : 1,
-            })}
-          >
-            <Text style={{ fontWeight: "700" }}>Dismiss all</Text>
-          </Pressable>
-        </View>
-        {!notificationsEnabled ? (
-          <Text style={{ marginTop: 8, opacity: 0.6 }}>Notifications are turned off in settings.</Text>
-        ) : notifications.length ? (
-          <View style={{ marginTop: 8, gap: 10 }}>
-            {notifications.map((notification) => {
-              const createdAt = notification.createdAt?.toDate?.();
-              const timeLabel = createdAt ? createdAt.toLocaleString() : "Just now";
+          <SectionHeader
+            title="Your groups"
+            subtitle="Tap a group to open its chat and goal."
+            style={{ marginTop: spacing.lg }}
+          />
+          <FlatList
+            data={cards}
+            horizontal
+            keyExtractor={(i) => i.groupId}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: spacing.xs }}
+            ItemSeparatorComponent={() => <View style={{ width: tileGap }} />}
+            renderItem={({ item }) => {
+              const target = item.targetWorkouts ?? 0;
+              const ratio = target ? globalCompleted / target : 0;
+              const progressText = target ? `${globalCompleted}/${target} complete` : "Set a goal";
+              const subtitle = item.inviteCode ? `Invite: ${item.inviteCode}` : "Invite: —";
+
               return (
-                <View
-                  key={notification.id}
-                  style={{
-                    backgroundColor: "white",
-                    borderRadius: 14,
-                    padding: 12,
-                    borderWidth: 1,
-                    borderColor: "#ececec",
-                  }}
-                >
-                  <Text style={{ fontWeight: "700" }}>{notification.message}</Text>
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6 }}>
-                    <Text style={{ opacity: 0.6, fontSize: 12 }}>{timeLabel}</Text>
-                    <Pressable onPress={() => dismissNotification(notification.id)}>
-                      <Text style={{ fontSize: 12, fontWeight: "700" }}>Dismiss</Text>
-                    </Pressable>
+                <Card style={{ width: tileWidth }} onPress={() => nav.navigate("Chat", { groupId: item.groupId })}>
+                  <Text
+                    style={{
+                      color: colors.text.primary,
+                      fontSize: typography.size.md,
+                      fontWeight: typography.weight.bold,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {item.groupName}
+                  </Text>
+                  <Text
+                    style={{
+                      marginTop: spacing.xs,
+                      color: colors.text.muted,
+                      fontSize: typography.size.sm,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {subtitle}
+                  </Text>
+                  <Text
+                    style={{
+                      marginTop: spacing.md,
+                      color: colors.text.secondary,
+                      fontSize: typography.size.sm,
+                      fontWeight: typography.weight.semibold,
+                    }}
+                  >
+                    {progressText}
+                  </Text>
+                  <View
+                    style={{
+                      marginTop: spacing.sm,
+                      height: spacing.xs,
+                      borderRadius: radius.pill,
+                      backgroundColor: colors.surface.cardAlt,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: `${Math.max(0, Math.min(1, ratio)) * 100}%`,
+                        height: "100%",
+                        backgroundColor: colors.accent.primary,
+                        borderRadius: radius.pill,
+                      }}
+                    />
                   </View>
-                </View>
+                </Card>
               );
-            })}
+            }}
+            ListEmptyComponent={
+              <Text style={{ color: colors.text.muted, fontSize: typography.size.sm }}>
+                No groups yet. Create or join one to begin.
+              </Text>
+            }
+          />
+        </View>
+
+        <View style={{ marginBottom: spacing.xl }}>
+          <SectionHeader
+            title="Recent group activity"
+            subtitle="A gentle pulse of what your friends are up to."
+            action={
+              <Pressable
+                onPress={dismissAllNotifications}
+                disabled={!notifications.length || !notificationsEnabled}
+                style={({ pressed }) => ({
+                  opacity: !notifications.length || !notificationsEnabled ? 0.35 : pressed ? 0.7 : 1,
+                })}
+              >
+                <Text style={{ color: colors.text.secondary, fontWeight: typography.weight.semibold }}>
+                  Dismiss all
+                </Text>
+              </Pressable>
+            }
+          />
+          <Card style={{ marginTop: spacing.md }}>
+            {!notificationsEnabled ? (
+              <Text style={{ color: colors.text.muted, fontSize: typography.size.sm }}>
+                Notifications are turned off in settings.
+              </Text>
+            ) : visibleNotifications.length ? (
+              <View style={{ gap: spacing.sm }}>
+                {visibleNotifications.map((notification) => {
+                  const createdAt = notification.createdAt?.toDate?.();
+                  const timeLabel = createdAt ? createdAt.toLocaleString() : "Just now";
+                  return (
+                    <View
+                      key={notification.id}
+                      style={{
+                        backgroundColor: colors.surface.cardAlt,
+                        borderRadius: radius.md,
+                        padding: spacing.md,
+                      }}
+                    >
+                      <Text style={{ color: colors.text.primary, fontWeight: typography.weight.semibold }}>
+                        {notification.message}
+                      </Text>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          marginTop: spacing.xs,
+                        }}
+                      >
+                        <Text style={{ color: colors.text.muted, fontSize: typography.size.xs }}>{timeLabel}</Text>
+                        <Pressable
+                          onPress={() => dismissNotification(notification.id)}
+                          style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+                        >
+                          <Text style={{ color: colors.text.secondary, fontSize: typography.size.xs }}>
+                            Dismiss
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  );
+                })}
+                {remainingNotifications > 0 ? (
+                  <Text style={{ color: colors.text.muted, fontSize: typography.size.xs }}>
+                    {`+${remainingNotifications} more update${remainingNotifications > 1 ? "s" : ""}`}
+                  </Text>
+                ) : null}
+              </View>
+            ) : (
+              <Text style={{ color: colors.text.muted, fontSize: typography.size.sm }}>
+                You’re all caught up!
+              </Text>
+            )}
+          </Card>
+        </View>
+
+        <View style={{ marginTop: "auto" }}>
+          <PrimaryActionButton
+            title="Log workout"
+            subtitle="Posts to every group"
+            onPress={() => setShowLog(true)}
+          />
+
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginTop: spacing.md,
+            }}
+          >
+            <Pressable
+              onPress={() => nav.navigate("CreateGroup")}
+              style={({ pressed }) => ({
+                flex: 1,
+                marginRight: spacing.sm,
+                backgroundColor: pressed ? colors.surface.cardAlt : colors.surface.card,
+                borderRadius: radius.md,
+                paddingVertical: spacing.md,
+                alignItems: "center",
+                borderWidth: StyleSheet.hairlineWidth,
+                borderColor: colors.border.subtle,
+              })}
+            >
+              <Text style={{ color: colors.text.primary, fontWeight: typography.weight.semibold }}>
+                Create group
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => nav.navigate("JoinGroup")}
+              style={({ pressed }) => ({
+                flex: 1,
+                marginRight: spacing.sm,
+                backgroundColor: pressed ? colors.surface.cardAlt : colors.surface.card,
+                borderRadius: radius.md,
+                paddingVertical: spacing.md,
+                alignItems: "center",
+                borderWidth: StyleSheet.hairlineWidth,
+                borderColor: colors.border.subtle,
+              })}
+            >
+              <Text style={{ color: colors.text.primary, fontWeight: typography.weight.semibold }}>
+                Join group
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => nav.navigate("Profile")}
+              style={({ pressed }) => ({
+                padding: spacing.sm,
+                borderRadius: radius.md,
+                backgroundColor: pressed ? colors.surface.cardAlt : colors.surface.card,
+                borderWidth: StyleSheet.hairlineWidth,
+                borderColor: colors.border.subtle,
+              })}
+            >
+              <Ionicons name="person-outline" size={typography.size.xl} color={colors.text.secondary} />
+            </Pressable>
+
+            <Pressable
+              onPress={() => nav.navigate("Settings")}
+              style={({ pressed }) => ({
+                marginLeft: spacing.sm,
+                padding: spacing.sm,
+                borderRadius: radius.md,
+                backgroundColor: pressed ? colors.surface.cardAlt : colors.surface.card,
+                borderWidth: StyleSheet.hairlineWidth,
+                borderColor: colors.border.subtle,
+              })}
+            >
+              <Ionicons name="settings-outline" size={typography.size.xl} color={colors.text.secondary} />
+            </Pressable>
           </View>
-        ) : (
-          <Text style={{ marginTop: 8, opacity: 0.6 }}>You’re all caught up!</Text>
-        )}
-      </View>
-
-      <View style={{ flex: 1 }} />
-
-      <View style={{ padding: sidePadding }}>
-        <Pressable
-          onPress={() => setShowLog(true)}
-          style={{
-            backgroundColor: "#111",
-            borderRadius: 18,
-            paddingVertical: 16,
-            alignItems: "center",
-          }}
-        >
-          <Text style={{ color: "white", fontWeight: "900", fontSize: 16 }}>Log workout</Text>
-          <Text style={{ color: "white", opacity: 0.75, marginTop: 4 }}>Posts to every group</Text>
-        </Pressable>
-
-        <View style={{ flexDirection: "row", gap: 10, marginTop: 10, alignItems: "center" }}>
-          <Pressable
-            onPress={() => nav.navigate("CreateGroup")}
-            style={{
-              flex: 1,
-              backgroundColor: "white",
-              borderRadius: 16,
-              paddingVertical: 14,
-              alignItems: "center",
-              borderWidth: 1,
-              borderColor: "#e6e6e6",
-            }}
-          >
-            <Text style={{ fontWeight: "800" }}>Create group</Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => nav.navigate("JoinGroup")}
-            style={{
-              flex: 1,
-              backgroundColor: "white",
-              borderRadius: 16,
-              paddingVertical: 14,
-              alignItems: "center",
-              borderWidth: 1,
-              borderColor: "#e6e6e6",
-            }}
-          >
-            <Text style={{ fontWeight: "800" }}>Join group</Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => nav.navigate("Profile")}
-            style={{ paddingHorizontal: 8, paddingVertical: 8 }}
-          >
-            <Ionicons name="person-outline" size={24} color={colors.text.secondary} />
-          </Pressable>
-
-          <Pressable
-            onPress={() => nav.navigate("Settings")}
-            style={{ paddingHorizontal: 8, paddingVertical: 8 }}
-          >
-            <Ionicons name="settings-outline" size={24} color={colors.text.secondary} />
-          </Pressable>
         </View>
       </View>
 
