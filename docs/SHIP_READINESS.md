@@ -4,7 +4,7 @@
 
 Audited baseline: `a382cf03a4f18ce7d9f879b8123de7069048bb47` on `main`. Reviewed the complete, non-truncated tree, all 61 non-lock text files and both npm lockfiles. No `AGENTS.md` exists. PNG asset files are present; their appearance, dimensions and suitability for store use have not been verified.
 
-This is a source audit, not a claim of runtime acceptance. GitHub read/write access was demonstrated. This chat has no attached local terminal/checkout; first-slice verification uses GitHub Actions where available. No deployed Firebase configuration, rules, data, signing credentials, console settings, physical devices or store consoles were inspected. Current-source scans found no obvious private-key/token credentials, but history and dependency vulnerability scans still need execution.
+This is a source audit, not a claim of runtime acceptance. GitHub read/write access was demonstrated. This chat has no attached local terminal/checkout; first-slice verification uses GitHub Actions where available. No deployed Firebase configuration, rules, data, signing credentials, console settings, physical devices or store consoles were inspected. Current-source scans found no obvious private-key/token credentials, but history scans and a detailed dependency-advisory inventory still need execution.
 
 The user-provided production roadmap is the product contract. Repository evidence is authoritative for what exists. The app is not production ready.
 
@@ -97,6 +97,7 @@ A global log already creates **one** workout, then separate conversation project
 | P1 | `HomeScreen` uses all-time count for period goals, returns cleanup from an onSnapshot callback (ignored), and attaches listeners after async membership writes | Release blocker for correct status, stale listeners and account-switch privacy |
 | P1 | Home/chat/progress/goal setup write membership while viewing; leave navigates before sequential deletion; nested listeners can add a departing user again | Release blocker for lifecycle/authz design |
 | P1 | Create/join/leave and nickname mirrors are non-atomic; duplicate joins overwrite membership/owner role; invites use Math.random without unique reservation | Release blocker for group lifecycle |
+| P1 | CI install audit reports 38 app dependency advisories (4 critical, 15 high) and 20 backend advisories (3 critical, 4 high); reachability/production impact not yet assessed | Release blocker pending detailed inventory and compatible remediation |
 | P1 | Account creation fires auth change before profile write is guaranteed; no repair/profile completion gate; native auth persistence initialization unverified | Release blocker pending session/golden-path tests |
 | P1 | Chat composer drops text before write and has no failure catch; profile save/logout/goal setup/push registration include unhandled async failures | Release blocker for user-visible reliability |
 | P1 | `GoalSetup` lacks submit busy/duplicate protection; root and entry-array goal copies drift on reorder/edit and read-modify-write updates race | Release blocker for goal correctness |
@@ -106,7 +107,7 @@ A global log already creates **one** workout, then separate conversation project
 | P2 | Dark theme provider versus Expo light setting and hardcoded light components; no safe-area/keyboard/a11y validation across all screens | Release UX blocker; migrate shared primitives first |
 | P3 | Unused GlobalWorkoutLogModal, home GoalTile, calculateGroupProgress, shortCode, env helper, action group helpers, push helper; empty analytics/theme/patch files | Acceptable post-launch cleanup unless it affects validation; do not delete working paths speculatively |
 
-No explicit TODO/FIXME markers were found. Several comments marked NEW/legacy and empty modules represent unfinished work. No hardcoded privileged credentials were found in current text; dependency audit, git-history scan and deployed logging review are still required. Logs include user/group IDs and some raw errors; production observability must minimize sensitive content.
+No explicit TODO/FIXME markers were found. Several comments marked NEW/legacy and empty modules represent unfinished work. No hardcoded privileged credentials were found in current text. Clean CI installs reported dependency advisories; a detailed npm audit inventory, production reachability assessment, git-history scan and deployed logging review are still required. Logs include user/group IDs and some raw errors; production observability must minimize sensitive content.
 
 No indexes are committed. Inventory actual queries and emulator/production missing-index responses, especially invite lookup, message ordering, member workout visibility and backend groupId applicability. Do not invent index requirements from filenames alone.
 
@@ -167,3 +168,16 @@ Changes: self + group-membership authorization before any callable progress acce
 The backend change intentionally removes the ability to recompute someone else's progress through the manual client callable. Existing Admin SDK triggers still recompute affected users. This is not a substitute for Firestore rules or server-owned membership validation. Deployed backend protection changes only after a reviewed deployment; this PR does not deploy.
 
 Validation results and any infrastructure limitation are recorded in the PR against its head commit. Lint/format, native builds, emulator rules tests, physical devices and store acceptance remain unverified even if CI is green.
+
+### Executed baseline checks
+
+At implementation commit `d737a41adf5bafe25b7b3c2e2d7665810ff86188`, [GitHub Actions run 36973632861](https://github.com/bomberpilot/workout-companion/actions/runs/36973632861) completed successfully on Node 22.14.0/npm 10.9.2:
+
+- Root and backend `npm ci`: passed.
+- Mobile and backend `tsc --noEmit`: passed.
+- Backend TypeScript compilation and 9 exported-callable authorization tests: passed, zero skipped/failing tests.
+- iOS and Android Metro/Hermes exports: passed.
+
+The installs reported **38 app dependency advisories** (1 low, 18 moderate, 15 high, 4 critical) and **20 backend advisories** (1 low, 12 moderate, 4 high, 3 critical). These counts can overlap and do not establish exploitability. Detailed dependency inventory and compatible updates are part of the next stabilization slice; do not run `npm audit fix --force` blindly. No dependency versions changed in this PR.
+
+The successful exports show that the current dependency graph bundles; they do not verify auth persistence, backend access or device runtime. No signed native build, device smoke test, live Firebase rule verification, lint/format suite or store acceptance has been completed. The scoped callable fix is committed but not deployed.
