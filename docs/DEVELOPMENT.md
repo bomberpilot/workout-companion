@@ -31,6 +31,7 @@ Backend emulator startup is not yet reproducible: there is no committed `firebas
 npm run typecheck
 npm run typecheck:functions
 npm test
+npm run dependencies:report
 npm run build:check
 # All four checks, in sequence:
 npm run check
@@ -38,11 +39,15 @@ npm run check
 
 - `typecheck` checks mobile entrypoints and `src` with Expo's strict configuration.
 - `typecheck:functions` checks the backend using its own dependencies/configuration.
-- `test` compiles the backend and runs Node's test runner against the exported callable. SDK boundaries are mocked; this does not test deployed Firestore rules.
+- `test` runs app auth initialization regressions, then compiles the backend and runs Node's test runner against the exported callable. SDK boundaries are mocked; this does not test deployed Firestore rules.
 - `build:check` exports iOS and Android Metro bundles. It does not compile/sign native binaries, launch the app, or exercise authentication.
 - CI runs independent check steps even after another check fails, so defects remain visible.
 
 No real linting or formatting suite existed at audit time. The existing backend `lint` script only prints a message and is not a validation gate. Establish lint/format tooling in the next stabilization PR with locked dependencies and a small reviewed diff; do not report the placeholder as passing lint.
+
+`dependencies:report` inventories both lockfiles using npm audit. It is informational: valid advisories are reported for triage rather than treated as a clean security gate; audit API/network/JSON failures fail the command. CI includes this report. Dependency updates must be compatible and validated, not forced blindly.
+
+Native Auth now initializes with AsyncStorage through Firebase's React Native conditional export before calling getAuth. The obsolete firebase/auth/react-native declaration/import is removed. Only auth/already-initialized triggers reuse during Fast Refresh; unrelated errors propagate. Web retains its default SDK path. Run the physical-device session cases in [backend setup](BACKEND_SETUP.md) before considering persistence accepted.
 
 No privileged Firebase values are needed for compilation or mocked authorization tests. Runtime/device checks do require a configured development Firebase app. Document observed check results and their exact commit in the PR; never replace a failing check with a no-op.
 

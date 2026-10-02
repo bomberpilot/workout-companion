@@ -181,3 +181,21 @@ At implementation commit `d737a41adf5bafe25b7b3c2e2d7665810ff86188`, [GitHub Act
 The installs reported **38 app dependency advisories** (1 low, 18 moderate, 15 high, 4 critical) and **20 backend advisories** (1 low, 12 moderate, 4 high, 3 critical). These counts can overlap and do not establish exploitability. Detailed dependency inventory and compatible updates are part of the next stabilization slice; do not run `npm audit fix --force` blindly. No dependency versions changed in this PR.
 
 The successful exports show that the current dependency graph bundles; they do not verify auth persistence, backend access or device runtime. No signed native build, device smoke test, live Firebase rule verification, lint/format suite or store acceptance has been completed. The scoped callable fix is committed but not deployed.
+
+## Native auth stabilization follow-up
+
+[Decision 001](decisions/001-keep-firebase-for-v1.md) retains Firebase for the MVP because the identified blockers are implementation issues, not verified provider limits. See [backend setup](BACKEND_SETUP.md) for the owner-reported project ID and owner-confirmed test-data status and the unknown deployed configuration.
+
+This bounded slice initializes native auth with AsyncStorage before default initialization, removes the legacy native-auth declaration and tests iOS/Android initialization, Fast Refresh, unexpected failures, missing persistence exports and the existing web path. App tests now run alongside callable authorization tests. Physical-device session restoration remains **NEEDS VERIFICATION**.
+
+A CI dependency report inventories both existing lockfiles before selecting compatible remediation. No dependency versions are changed in this slice. Real lint/format tooling, detailed dependency remediation, deployed-rule reconciliation and server-owned membership/workout operations remain follow-ups.
+
+### Executed native-auth checks
+
+At implementation commit `ac779fed2bf9d0fad84842c10f62d1e520ae09ed`, [GitHub Actions run 36974789056](https://github.com/bomberpilot/workout-companion/actions/runs/36974789056) passed clean installs, both TypeScript checks, all 7 app initialization tests, all 9 backend authorization tests, and iOS/Android Metro/Hermes exports. Installed-package inspection confirmed Firebase 12.7.0 / @firebase/auth 1.12.0 supplies a React Native conditional entrypoint. Mocked tests and exports do not establish physical-device persistence.
+
+The informational dependency inventory passed and reproduced the existing 38 app / 20 backend advisory counts. See [dependency triage](DEPENDENCY_TRIAGE.md) for high/critical package evidence and remediation order. These unresolved advisories remain release concerns; a successful informational report is not security approval.
+
+### Owner-supplied backend configuration
+
+The owner provided the current rules text and reports no custom indexes. [Security review](SECURITY_REVIEW.md) identifies broad private reads, invitation/group enumeration, unrestricted self-enrollment, message author takeover and other data-validation gaps. Rules compilation/emulator execution is still pending. The next security slice must change membership/invite operations and the affected client reads together with rules so the golden path continues to work. Email/Password provider status is awaiting owner confirmation; [backend setup](BACKEND_SETUP.md) gives Console navigation steps.
