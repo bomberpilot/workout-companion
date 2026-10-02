@@ -8,14 +8,16 @@ Owner-reported existing Firebase project ID: `workout-companion-d078f`.
 
 The owner reports that existing Firestore records and login accounts are test data created from a phone using a desktop Expo development server. The owner can clear that data. Retain the fixtures until reconciliation/session checks are complete; this PR does not delete records or Auth identities.
 
-Unknown: currently deployed Firestore rules/indexes; enabled Auth providers/settings; live function versions/region/runtime; registered Firebase client app values. No console/project access has been verified.
+The owner supplied the current rules text and reports no custom indexes. [Security review](SECURITY_REVIEW.md) records the authorization gaps and the supplied-policy transcript. A complete export and emulator compilation are still needed; no console/project access has been verified.
+
+Unknown: enabled Auth providers/settings; live function versions/region/runtime; registered Firebase client app values.
 
 This repository's GitHub authorization allows code changes and PR checks. It does not grant access to Firebase/Google Cloud, Expo/EAS, signing or store consoles. No live Firebase write or deployment is included in the auth-stabilization PR.
 
 ## Needed for backend reconciliation
 
 1. Test-only data status is owner-confirmed. Establish a dedicated development/staging environment and separate production targeting before release.
-2. Provide the current deployed Firestore rules and index definitions, preferably as reviewed repository files, so we can reconcile them rather than replacing unknown policies. In Firebase Console, copy Firestore Database → Rules and record the definitions under Indexes. These policy/index definitions can be shared without account credentials.
+2. Owner-reported rules and no-custom-index status are recorded. Reconcile a complete rules export and develop tested replacements alongside the affected client/server operations; see the security review.
 3. Confirm enabled Authentication providers and email/password settings. Capture the six registered Firebase client values from project settings in the appropriate development environment; public client values are embedded by Expo.
 4. Identify deployed functions and their runtime/region. Confirm deployment ownership and intended environment.
 
@@ -42,3 +44,9 @@ Physical-device acceptance still needs valid development client configuration an
 - Expired/deleted account and interrupted network: intentional handling.
 
 Passing bundle export does not establish any of these runtime results.
+
+## Find the Authentication provider setting
+
+Open [the project's sign-in providers](https://console.firebase.google.com/project/workout-companion-d078f/authentication/providers), or select Build → Authentication → Sign-in method in Firebase Console. If Authentication shows Get started, complete that first. Select Email/Password, enable the first Email/Password toggle if disabled, and save. The current app uses email/password signup/login; email-link sign-in is not implemented and does not need enabling. Confirm the provider row shows Enabled for the correct project.
+
+Existing test accounts do not replace checking the current provider setting. Record the observed status once the owner confirms it.
