@@ -40,3 +40,12 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Generated Cloud Functions JavaScript
+/functions/lib/
+
+# Environment variants and service account credentials
+.env.*
+!.env.example
+*service-account*.json
+*serviceAccount*.json

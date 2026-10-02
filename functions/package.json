@@ -6,7 +6,9 @@
   "scripts": {
     "build": "tsc",
     "lint": "echo \"No lint configured\"",
-    "serve": "firebase emulators:start --only functions"
+    "serve": "firebase emulators:start --only functions",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test test/*.test.cjs"
   },
   "dependencies": {
     "firebase-admin": "^12.7.0",
