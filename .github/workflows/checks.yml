@@ -3,7 +3,7 @@ name: Repository checks
 on:
   pull_request:
   push:
-    branches: [main, codex/ship-readiness-baseline]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   checks:
-    name: TypeScript, callable tests, and mobile bundles
+    name: TypeScript, regression tests, and mobile bundles
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -36,7 +36,7 @@ jobs:
       - name: Check function TypeScript
         if: ${{ !cancelled() }}
         run: npm run typecheck:functions
-      - name: Test callable authorization
+      - name: Test auth initialization and callable authorization
         if: ${{ !cancelled() }}
         run: npm test
       - name: Check iOS and Android Metro bundles
@@ -44,3 +44,19 @@ jobs:
         run: npm run build:check
         env:
           CI: "1"
+
+  dependency-report:
+    name: Dependency advisory inventory (informational)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Report dependency advisories from both lockfiles
+        run: npm run dependencies:report
+      - name: Inspect Firebase native entrypoint
+        run: |
+          npm ci --ignore-scripts
+          node -e 'const fs = require("node:fs"); const path = require("node:path"); const root = path.dirname(require.resolve("firebase/package.json")); const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")); console.log(JSON.stringify({firebaseVersion: pkg.version, authExports: pkg.exports["./auth"]})); const authRoot = path.dirname(require.resolve("@firebase/auth/package.json")); const authPkg = JSON.parse(fs.readFileSync(path.join(authRoot, "package.json"), "utf8")); console.log(JSON.stringify({authVersion: authPkg.version, exports: authPkg.exports}));'

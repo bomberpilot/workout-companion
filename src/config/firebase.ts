@@ -1,7 +1,9 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
-import { initializeAuth, getAuth, type Auth } from "firebase/auth";
+import * as FirebaseAuth from "firebase/auth";
+import type { Auth, Persistence } from "firebase/auth";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
 
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -14,28 +16,41 @@ const firebaseConfig = {
 
 export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-// Load RN persistence via require to keep Metro happy across environments
-type GetReactNativePersistenceFn = (storage: any) => any;
+// Firebase exposes this helper through its React Native conditional entrypoint,
+// but the shared browser/Node TypeScript declarations omit it.
+type NativeAuthModule = typeof FirebaseAuth & {
+  getReactNativePersistence?: (storage: typeof AsyncStorage) => Persistence;
+};
 
-let getReactNativePersistenceFn: GetReactNativePersistenceFn | null = null;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  getReactNativePersistenceFn = require("firebase/auth/react-native")?.getReactNativePersistence ?? null;
-} catch {
-  getReactNativePersistenceFn = null;
+function initializeAppAuth(): Auth {
+  if (Platform.OS === "web") {
+    return FirebaseAuth.getAuth(app);
+  }
+
+  const getReactNativePersistence = (FirebaseAuth as NativeAuthModule).getReactNativePersistence;
+  if (typeof getReactNativePersistence !== "function") {
+    throw new Error("The Firebase React Native persistence entrypoint is unavailable.");
+  }
+
+  try {
+    // getAuth initializes auth with default persistence if called first.
+    // Configure persistent native storage before any default initialization.
+    return FirebaseAuth.initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage),
+    });
+  } catch (error: unknown) {
+    // Fast Refresh may re-evaluate this module after auth was initialized.
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "auth/already-initialized"
+    ) {
+      return FirebaseAuth.getAuth(app);
+    }
+    throw error;
+  }
 }
 
-// Fast Refresh safe: reuse existing auth if already initialized
-let auth: Auth;
-try {
-  auth = getAuth(app);
-} catch {
-  auth =
-    getReactNativePersistenceFn
-      ? initializeAuth(app, { persistence: getReactNativePersistenceFn(AsyncStorage) })
-      : getAuth(app);
-}
-
-export { auth };
-
+export const auth = initializeAppAuth();
 export const db = getFirestore(app);
