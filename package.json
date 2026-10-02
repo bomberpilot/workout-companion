@@ -7,7 +7,12 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "zip": "powershell -Command \"Compress-Archive -Path . -DestinationPath code_$((Get-Date).ToString('yyyyMMdd_HHmm')).zip -CompressionLevel NoCompression -Exclude node_modules,.git,.expo,dist,build\""
+    "zip": "powershell -Command \"Compress-Archive -Path . -DestinationPath code_$((Get-Date).ToString('yyyyMMdd_HHmm')).zip -CompressionLevel NoCompression -Exclude node_modules,.git,.expo,dist,build\"",
+    "typecheck": "tsc --noEmit",
+    "typecheck:functions": "npm --prefix functions run typecheck",
+    "test": "npm --prefix functions test",
+    "build:check": "expo export --platform ios --platform android",
+    "check": "npm run typecheck && npm run typecheck:functions && npm test && npm run build:check"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

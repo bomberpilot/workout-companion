@@ -193,13 +193,28 @@ export const recomputeGoalProgress = functions.https.onCall(async (data, context
     throw new functions.https.HttpsError("unauthenticated", "Authentication required.");
   }
 
-  const userId = typeof data?.userId === "string" ? data.userId : context.auth.uid;
-  const groupId = typeof data?.groupId === "string" ? data.groupId : "";
-  if (!groupId) {
-    throw new functions.https.HttpsError("invalid-argument", "groupId is required.");
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new functions.https.HttpsError("invalid-argument", "A groupId is required.");
   }
 
-  functions.logger.info("Manual recompute requested", { requestedBy: context.auth.uid, userId, groupId });
+  // Keep the existing optional userId argument, but never trust it as authority.
+  const userId = context.auth.uid;
+  if (data.userId !== undefined && data.userId !== userId) {
+    throw new functions.https.HttpsError("permission-denied", "You can only recompute your own progress.");
+  }
+
+  const groupId = typeof data.groupId === "string" ? data.groupId.trim() : "";
+  if (!groupId || groupId.includes("/") || groupId.length > 1500) {
+    throw new functions.https.HttpsError("invalid-argument", "A valid groupId is required.");
+  }
+
+  // Admin SDK reads bypass Firestore rules, so this boundary must authorize access.
+  const membership = await db.collection("groups").doc(groupId).collection("members").doc(userId).get();
+  if (!membership.exists) {
+    throw new functions.https.HttpsError("permission-denied", "Group membership is required.");
+  }
+
+  functions.logger.info("Manual recompute requested", { userId, groupId });
   await recomputeGoalProgressForGroup(userId, groupId);
   return { ok: true };
 });

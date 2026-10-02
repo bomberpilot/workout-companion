@@ -1,0 +1,46 @@
+name: Repository checks
+
+on:
+  pull_request:
+  push:
+    branches: [main, codex/ship-readiness-baseline]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: TypeScript, callable tests, and mobile bundles
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+      - name: Install app dependencies
+        run: npm ci
+      - name: Install function dependencies
+        run: npm --prefix functions ci
+      - name: Check app TypeScript
+        run: npm run typecheck
+      - name: Check function TypeScript
+        if: ${{ !cancelled() }}
+        run: npm run typecheck:functions
+      - name: Test callable authorization
+        if: ${{ !cancelled() }}
+        run: npm test
+      - name: Check iOS and Android Metro bundles
+        if: ${{ !cancelled() }}
+        run: npm run build:check
+        env:
+          CI: "1"
