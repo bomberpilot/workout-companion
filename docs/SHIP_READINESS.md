@@ -14,7 +14,7 @@ Status vocabulary: **DONE** = artifact/implementation verified within its stated
 
 | Area | Current implementation |
 | --- | --- |
-| Client | Expo 54.0.30, React Native 0.81.5, React 19.1.0, TypeScript 5.9.3 in the lockfile; new architecture enabled |
+| Client | Expo 54.0.37, React Native 0.81.5, React 19.1.0, TypeScript 5.9.3 in the lockfile; new architecture enabled |
 | Package manager | npm; lockfile v3 at root and separately in `functions/`; no workspace configuration |
 | Entrypoint/navigation | `index.ts` registers root `App.tsx`, which re-exports `src/app/App.tsx`; React Navigation 7 native stack, auth-gated routes |
 | State | React hooks/context for auth/theme; screen-local state and Firestore listeners; no separate global state framework |
@@ -97,7 +97,7 @@ A global log already creates **one** workout, then separate conversation project
 | P1 | `HomeScreen` uses all-time count for period goals, returns cleanup from an onSnapshot callback (ignored), and attaches listeners after async membership writes | Release blocker for correct status, stale listeners and account-switch privacy |
 | P1 | Home/chat/progress/goal setup write membership while viewing; leave navigates before sequential deletion; nested listeners can add a departing user again | Release blocker for lifecycle/authz design |
 | P1 | Create/join/leave and nickname mirrors are non-atomic; duplicate joins overwrite membership/owner role; invites use Math.random without unique reservation | Release blocker for group lifecycle |
-| P1 | CI install audit reports 38 app dependency advisories (4 critical, 15 high) and 20 backend advisories (3 critical, 4 high); reachability/production impact not yet assessed | Release blocker pending detailed inventory and compatible remediation |
+| P1 | The 2026-10-10 dependency report lists 54 app dependency advisories (3 critical, 33 high) and 22 backend advisories (4 critical, 5 high); reachability/production impact is not yet assessed | Release blocker pending detailed inventory and compatible remediation |
 | P1 | Account creation fires auth change before profile write is guaranteed; no repair/profile completion gate; native auth persistence initialization unverified | Release blocker pending session/golden-path tests |
 | P1 | Chat composer drops text before write and has no failure catch; profile save/logout/goal setup/push registration include unhandled async failures | Release blocker for user-visible reliability |
 | P1 | `GoalSetup` lacks submit busy/duplicate protection; root and entry-array goal copies drift on reorder/edit and read-modify-write updates race | Release blocker for goal correctness |
@@ -124,7 +124,7 @@ Required work: reauthentication + server-owned deletion/cascade policy; profile/
 | Gate | Status at audited baseline | Evidence needed |
 | --- | --- | --- |
 | Clean install/app startup/TypeScript | NEEDS VERIFICATION | Clean npm installs, typechecks, Metro exports and device launch |
-| Automated checks/lint/format | MISSING | First slice adds tests/checks/CI; lint/format follow-up remains |
+| Automated checks/lint/format | PARTIAL | TypeScript, regression tests, Metro exports, Expo ESLint, and Expo Doctor run in CI. A formatting check and broader domain/integration coverage remain. |
 | Clean iOS production build | MISSING | Signed EAS/native production build |
 | Clean Android production build | MISSING | Signed AAB and required target API verification |
 | No known critical crashes | NEEDS VERIFICATION | Device/release exercise and crash visibility |
@@ -178,9 +178,9 @@ At implementation commit `d737a41adf5bafe25b7b3c2e2d7665810ff86188`, [GitHub Act
 - Backend TypeScript compilation and 9 exported-callable authorization tests: passed, zero skipped/failing tests.
 - iOS and Android Metro/Hermes exports: passed.
 
-The installs reported **38 app dependency advisories** (1 low, 18 moderate, 15 high, 4 critical) and **20 backend advisories** (1 low, 12 moderate, 4 high, 3 critical). These counts can overlap and do not establish exploitability. Detailed dependency inventory and compatible updates are part of the next stabilization slice; do not run `npm audit fix --force` blindly. No dependency versions changed in this PR.
+The refreshed report lists **54 app dependency advisories** (1 low, 17 moderate, 33 high, 3 critical) and **22 backend advisories** (1 low, 12 moderate, 5 high, 4 critical). These counts can overlap and do not establish exploitability. Detailed dependency inventory and compatible updates remain part of stabilization; do not run `npm audit fix --force` blindly.
 
-The successful exports show that the current dependency graph bundles; they do not verify auth persistence, backend access or device runtime. No signed native build, device smoke test, live Firebase rule verification, lint/format suite or store acceptance has been completed. The scoped callable fix is committed but not deployed.
+The successful exports show that the current dependency graph bundles; they do not verify auth persistence, backend access or device runtime. No signed native build, device smoke test, live Firebase rule verification, formatting suite or store acceptance has been completed. The scoped callable fix is committed but not deployed.
 
 ## Native auth stabilization follow-up
 
@@ -194,7 +194,7 @@ A CI dependency report inventories both existing lockfiles before selecting comp
 
 At implementation commit `ac779fed2bf9d0fad84842c10f62d1e520ae09ed`, [GitHub Actions run 36974789056](https://github.com/bomberpilot/workout-companion/actions/runs/36974789056) passed clean installs, both TypeScript checks, all 7 app initialization tests, all 9 backend authorization tests, and iOS/Android Metro/Hermes exports. Installed-package inspection confirmed Firebase 12.7.0 / @firebase/auth 1.12.0 supplies a React Native conditional entrypoint. Mocked tests and exports do not establish physical-device persistence.
 
-The informational dependency inventory passed and reproduced the existing 38 app / 20 backend advisory counts. See [dependency triage](DEPENDENCY_TRIAGE.md) for high/critical package evidence and remediation order. These unresolved advisories remain release concerns; a successful informational report is not security approval.
+The informational dependency inventory passed and, when refreshed on 2026-10-10, reported 54 app / 22 backend affected package entries. See [dependency triage](DEPENDENCY_TRIAGE.md) for package evidence and remediation order. These unresolved advisories remain release concerns; a successful informational report is not security approval.
 
 ### Owner-supplied backend configuration
 

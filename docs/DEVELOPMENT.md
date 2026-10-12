@@ -43,7 +43,9 @@ npm run check
 - `build:check` exports iOS and Android Metro bundles. It does not compile/sign native binaries, launch the app, or exercise authentication.
 - CI runs independent check steps even after another check fails, so defects remain visible.
 
-No real linting or formatting suite existed at audit time. The existing backend `lint` script only prints a message and is not a validation gate. Establish lint/format tooling in the next stabilization PR with locked dependencies and a small reviewed diff; do not report the placeholder as passing lint.
+The root `npm run lint` command uses Expo's ESLint configuration. The aggregate `npm run check` command also runs Expo Doctor so incompatible native dependency versions and missing peer dependencies fail CI. The Functions package's own `lint` script remains a placeholder; Functions TypeScript and regression tests are enforced separately.
+
+Test scripts pass explicit files to Node's built-in runner so they behave consistently across Node versions, Windows PowerShell, and POSIX CI shells.
 
 `dependencies:report` inventories both lockfiles using npm audit. It is informational: valid advisories are reported for triage rather than treated as a clean security gate; audit API/network/JSON failures fail the command. CI includes this report. Dependency updates must be compatible and validated, not forced blindly.
 

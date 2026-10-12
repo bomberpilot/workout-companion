@@ -1,19 +1,19 @@
 # Dependency advisory triage
 
-Snapshot: [CI run 36974789056](https://github.com/bomberpilot/workout-companion/actions/runs/36974789056), implementation commit `ac779fed2bf9d0fad84842c10f62d1e520ae09ed`. Reproduce with `npm run dependencies:report`; the audit service can change over time.
+Snapshot refreshed locally on 2026-10-10 after Expo SDK 54 dependency alignment. Reproduce with `npm run dependencies:report`; the audit service can change over time.
 
-No dependency versions changed in the native-auth slice. The CI report is informational and fails on audit-service/invalid-response errors, not on valid advisories. It must not be described as a passing security gate.
+The native-auth slice did not change dependency versions. The following stabilization slice aligned Expo SDK 54 patch versions, installed required native peers, and removed a duplicate native module reported by Expo Doctor. The advisory report remains informational and fails on audit-service/invalid-response errors, not on valid advisories. It must not be described as a passing security gate.
 
 | Lockfile | Critical | High | Moderate | Low | Total affected package entries |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| App | 4 | 15 | 18 | 1 | 38 |
-| Functions | 3 | 4 | 12 | 1 | 20 |
+| App | 3 | 33 | 17 | 1 | 54 |
+| Functions | 4 | 5 | 12 | 1 | 22 |
 
 Counts may overlap between graphs and do not equal distinct exploitable vulnerabilities. Reachability in shipped native bundles, deployed functions or build tooling has not yet been established. Lower severity entries remain in the reproducible JSON inventory.
 
-## High and critical entries
+## Previously identified high and critical entries
 
-The advisory column links one highest-severity advisory per package; the report contains all contributing advisories. Installed versions come from the unchanged lockfiles. A compatible fix reported by npm is a candidate for review, not evidence of a validated upgrade.
+The advisory column links one highest-severity advisory per package from the earlier CI snapshot; the live report is authoritative for the current full inventory. A compatible fix reported by npm is a candidate for review, not evidence of a validated upgrade.
 
 | Graph | Package | Locked version(s) | Severity | npm fix indication | Advisory |
 | --- | --- | --- | --- | --- | --- |
