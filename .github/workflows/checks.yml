@@ -27,6 +27,10 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             functions/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
       - name: Install app dependencies
         run: npm ci
       - name: Install function dependencies
@@ -36,7 +40,7 @@ jobs:
       - name: Check function TypeScript
         if: ${{ !cancelled() }}
         run: npm run typecheck:functions
-      - name: Test auth initialization and callable authorization
+      - name: Test auth, callable authorization, group lifecycle, and Firestore rules
         if: ${{ !cancelled() }}
         run: npm test
       - name: Check iOS and Android Metro bundles

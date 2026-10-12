@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Alert, Text, View } from "react-native";
-import { collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where } from "firebase/firestore";
+import { Alert, View } from "react-native";
+import { doc, getDoc } from "firebase/firestore";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
@@ -12,6 +12,7 @@ import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import SectionHeader from "../components/ui/SectionHeader";
 import { useTheme } from "../theme/ThemeProvider";
+import { joinGroupByInviteCode } from "../firestore/actions";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "JoinGroup">;
 
@@ -47,30 +48,8 @@ export default function JoinGroupScreen() {
 
     setBusy(true);
     try {
-      const qy = query(collection(db, "groups"), where("inviteCode", "==", code));
-      const snap = await getDocs(qy);
-      if (snap.empty) return Alert.alert("Not found", "No group matches that invite code.");
-
-      const groupId = snap.docs[0].id;
-
-      await setDoc(
-        doc(db, "groups", groupId, "members", user.uid),
-        {
-          userId: user.uid,
-          role: "member",
-          nickname: nick,
-          joinDate: serverTimestamp(),
-        },
-        { merge: true }
-      );
-
-      await setDoc(
-        doc(db, "users", user.uid, "groups", groupId),
-        { joinedAt: serverTimestamp(), nickname: nick },
-        { merge: true }
-      );
-
-      nav.navigate("GoalSetup", { groupId });
+      const result = await joinGroupByInviteCode({ inviteCode: code, nickname: nick });
+      nav.navigate("GoalSetup", { groupId: result.groupId });
     } catch (e: any) {
       Alert.alert("Join error", e?.message ?? "Something went wrong.");
     } finally {

@@ -12,10 +12,11 @@
     "typecheck:functions": "npm --prefix functions run typecheck",
     "lint": "expo lint",
     "doctor": "expo-doctor",
-    "test": "npm run test:app && npm --prefix functions test",
+    "test": "npm run test:app && npm --prefix functions test && npm run test:firestore",
     "build:check": "expo export --platform ios --platform android",
     "check": "npm run typecheck && npm run typecheck:functions && npm run lint && npm run doctor && npm test && npm run build:check",
     "test:app": "node --test tests/firebase-auth.test.cjs",
+    "test:firestore": "npm --prefix functions run build && firebase emulators:exec --only firestore --project demo-workout-companion \"node --test --test-concurrency=1 tests/firestore-rules.test.cjs tests/group-lifecycle-emulator.test.cjs\"",
     "dependencies:report": "node scripts/dependency-report.cjs"
   },
   "dependencies": {
@@ -43,12 +44,14 @@
     "react-native-svg": "15.12.1"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@types/react": "~19.1.0",
     "babel-plugin-module-resolver": "^5.0.2",
     "babel-preset-expo": "~54.0.10",
     "eslint": "^9.39.5",
     "eslint-config-expo": "~10.0.0",
     "expo-doctor": "^1.20.4",
+    "firebase-tools": "^15.33.0",
     "typescript": "~5.9.2"
   },
   "private": true

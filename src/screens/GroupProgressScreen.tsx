@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Alert, FlatList, Share, StyleSheet, Text, View } from "react-native";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
+import { collection, onSnapshot } from "firebase/firestore";
 
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { useAuth } from "../auth/useAuth";
@@ -10,9 +10,10 @@ import { db } from "../config/firebase";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import SectionHeader from "../components/ui/SectionHeader";
-import { groupDoc, groupMemberDoc, groupMembersCol, userGroupDoc } from "../firestore/paths";
+import { groupDoc, groupMembersCol } from "../firestore/paths";
 import { formatDurationMinutes } from "../utils/progress";
 import { useTheme } from "../theme/ThemeProvider";
+import { leaveGroup as leaveGroupAction } from "../firestore/actions";
 
 type R = RouteProp<RootStackParamList, "GroupProgress">;
 type Nav = NativeStackNavigationProp<RootStackParamList, "GroupProgress">;
@@ -79,7 +80,7 @@ export default function GroupProgressScreen() {
   const { params } = useRoute<R>();
   const nav = useNavigation<Nav>();
   const { user, initializing } = useAuth();
-  const { colors, spacing, typography } = useTheme();
+  const { colors, spacing } = useTheme();
   const [rows, setRows] = useState<Row[]>([]);
   const [goalRows, setGoalRows] = useState<GoalRow[]>([]);
   const [memberNames, setMemberNames] = useState<Record<string, string>>({});
@@ -87,54 +88,33 @@ export default function GroupProgressScreen() {
 
   useEffect(() => {
     if (!user) return;
-    let active = true;
-    let unsub = () => {};
+    const goalsRef = collection(db, "groups", params.groupId, "goals");
+    return onSnapshot(
+      goalsRef,
+      (snap) => {
+        const next: GoalRow[] = snap.docs.map((d) => {
+          const gd = d.data() as any;
+          const target = Number(gd?.targetWorkouts ?? 0) || 0;
+          const completed = readCompletedWorkouts(gd?.completedWorkouts);
+          const totalDurationMinutes = Number(gd?.totalDurationMinutes ?? 0) || 0;
+          const displayName = String(gd?.displayName ?? "").trim() || d.id.slice(0, 6);
+          const goalDateISO = typeof gd?.goalDateISO === "string" ? gd.goalDateISO : undefined;
+          const goalDateReason = typeof gd?.goalDateReason === "string" ? gd.goalDateReason : undefined;
+          return {
+            userId: d.id,
+            displayName,
+            target,
+            completed,
+            totalDurationMinutes,
+            goalDateISO,
+            goalDateReason,
+          };
+        });
 
-    (async () => {
-      try {
-        await setDoc(
-          doc(db, "groups", params.groupId, "members", user.uid),
-          { userId: user.uid, joinDate: serverTimestamp() },
-          { merge: true }
-        );
-      } catch {
-        // non-fatal
-      }
-
-      if (!active) return;
-      const goalsRef = collection(db, "groups", params.groupId, "goals");
-      unsub = onSnapshot(
-        goalsRef,
-        (snap) => {
-          const next: GoalRow[] = snap.docs.map((d) => {
-            const gd = d.data() as any;
-            const target = Number(gd?.targetWorkouts ?? 0) || 0;
-            const completed = readCompletedWorkouts(gd?.completedWorkouts);
-            const totalDurationMinutes = Number(gd?.totalDurationMinutes ?? 0) || 0;
-            const displayName = String(gd?.displayName ?? "").trim() || d.id.slice(0, 6);
-            const goalDateISO = typeof gd?.goalDateISO === "string" ? gd.goalDateISO : undefined;
-            const goalDateReason = typeof gd?.goalDateReason === "string" ? gd.goalDateReason : undefined;
-            return {
-              userId: d.id,
-              displayName,
-              target,
-              completed,
-              totalDurationMinutes,
-              goalDateISO,
-              goalDateReason,
-            };
-          });
-
-          setGoalRows(next);
-        },
-        (err) => Alert.alert("Progress error", err.message)
-      );
-    })();
-
-    return () => {
-      active = false;
-      unsub();
-    };
+        setGoalRows(next);
+      },
+      (err) => Alert.alert("Progress error", err.message)
+    );
   }, [params.groupId, user]);
 
   useEffect(() => {
@@ -198,10 +178,9 @@ export default function GroupProgressScreen() {
 
   async function leaveGroup() {
     if (!user) return;
-    nav.navigate("Home");
     try {
-      await deleteDoc(groupMemberDoc(params.groupId, user.uid));
-      await deleteDoc(userGroupDoc(user.uid, params.groupId));
+      await leaveGroupAction({ groupId: params.groupId });
+      nav.navigate("Home");
     } catch (err: any) {
       Alert.alert("Leave group error", err?.message ?? "Unable to leave this group.");
     }

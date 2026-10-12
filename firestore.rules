@@ -1,0 +1,336 @@
+// ===============================================================
+// Assumed data model
+// ===============================================================
+// users/{uid}: private email/display name profile; owner-only.
+// users/{uid}/groups/{groupId}: server-created membership mirror.
+// users/{uid}/workouts/{workoutId}: one canonical private workout.
+// users/{uid}/notifications/{id}: recipient-owned activity notification.
+// users/{uid}/private/settings: notification preferences and Expo tokens.
+// groups/{groupId}: server-created group metadata, readable by members.
+// groups/{groupId}/members/{uid}: server-created role and group nickname.
+// groups/{groupId}/messages/{id}: immutable text/workout activity.
+// groups/{groupId}/goals/{uid}: member-readable, owner-authored goal data.
+// groupInvites/{code}: server-only invite-code reservation.
+//
+// Cloud Functions use the Admin SDK and must perform their own authorization.
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isGroupMember(groupId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
+    }
+
+    function isValidString(value, minLength, maxLength) {
+      return value is string && value.size() >= minLength && value.size() <= maxLength;
+    }
+
+    function isOptionalTimestamp(data, field) {
+      return !(field in data) || data[field] is timestamp;
+    }
+
+    function isOptionalString(data, field, maxLength) {
+      return !(field in data) || isValidString(data[field], 0, maxLength);
+    }
+
+    function isOptionalNullableString(data, field, maxLength) {
+      return !(field in data) || data[field] == null || isValidString(data[field], 0, maxLength);
+    }
+
+    function isOptionalNullableNumber(data, field, minValue, maxValue) {
+      return !(field in data) || data[field] == null ||
+        (data[field] is number && data[field] >= minValue && data[field] <= maxValue);
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasOnly(['email', 'displayName', 'createdAt', 'updatedAt']) &&
+        data.keys().hasAll(['email', 'displayName', 'createdAt', 'updatedAt']) &&
+        isValidString(data.email, 3, 254) &&
+        isValidString(data.displayName, 0, 80) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidMembership(data, memberId) {
+      return data.keys().hasOnly(['userId', 'role', 'nickname', 'joinDate', 'updatedAt']) &&
+        data.keys().hasAll(['userId', 'role', 'nickname', 'joinDate']) &&
+        data.userId == memberId &&
+        data.role in ['owner', 'admin', 'member'] &&
+        isValidString(data.nickname, 0, 40) &&
+        data.joinDate is timestamp &&
+        isOptionalTimestamp(data, 'updatedAt');
+    }
+
+    function isValidMembershipMirror(data) {
+      return data.keys().hasOnly(['role', 'nickname', 'joinedAt', 'updatedAt']) &&
+        data.keys().hasAll(['nickname', 'joinedAt']) &&
+        (!('role' in data) || data.role in ['owner', 'admin', 'member']) &&
+        isValidString(data.nickname, 0, 40) &&
+        data.joinedAt is timestamp &&
+        isOptionalTimestamp(data, 'updatedAt');
+    }
+
+    function isValidWorkout(data, userId) {
+      return data.keys().hasOnly([
+          'userId', 'groupId', 'activityTypes', 'durationMinutes', 'date',
+          'performedAt', 'notes', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasAll([
+          'userId', 'groupId', 'activityTypes', 'durationMinutes', 'date',
+          'performedAt', 'notes', 'createdAt', 'updatedAt'
+        ]) &&
+        data.userId == userId &&
+        isValidString(data.groupId, 1, 1500) &&
+        data.activityTypes is list &&
+        data.activityTypes.size() >= 1 &&
+        data.activityTypes.size() <= 12 &&
+        data.activityTypes.hasOnly(['Cardio', 'Strength', 'Flexibility', 'Sport', 'Other']) &&
+        data.durationMinutes is int &&
+        data.durationMinutes >= 0 &&
+        data.durationMinutes <= 1440 &&
+        data.date is timestamp &&
+        data.performedAt is timestamp &&
+        data.performedAt <= request.time + duration.value(1, 'd') &&
+        isValidString(data.notes, 0, 1000) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isWorkoutGroupAllowed(data) {
+      return data.groupId == 'all' ||
+        exists(/databases/$(database)/documents/groups/$(data.groupId)/members/$(request.auth.uid));
+    }
+
+    function isValidSettings(data) {
+      return data.keys().hasOnly(['notificationsEnabled', 'expoPushTokens', 'updatedAt']) &&
+        data.keys().hasAll(['updatedAt']) &&
+        (!('notificationsEnabled' in data) || data.notificationsEnabled is bool) &&
+        (!('expoPushTokens' in data) ||
+          (data.expoPushTokens is list && data.expoPushTokens.size() <= 10)) &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidNotification(data, recipientId) {
+      return data.keys().hasOnly([
+          'type', 'userId', 'actorUserId', 'actorName', 'groupId', 'workoutId',
+          'message', 'read', 'createdAt'
+        ]) &&
+        data.keys().hasAll([
+          'type', 'userId', 'actorUserId', 'actorName', 'groupId', 'workoutId',
+          'message', 'read', 'createdAt'
+        ]) &&
+        data.type == 'group_workout' &&
+        data.userId == recipientId &&
+        data.actorUserId == request.auth.uid &&
+        isValidString(data.actorName, 1, 80) &&
+        isValidString(data.groupId, 1, 1500) &&
+        isValidString(data.workoutId, 1, 1500) &&
+        isValidString(data.message, 1, 500) &&
+        data.read is bool &&
+        data.createdAt is timestamp;
+    }
+
+    function isCanonicalWorkoutForGroup(userId, workoutId, groupId) {
+      return exists(/databases/$(database)/documents/users/$(userId)/workouts/$(workoutId)) &&
+        get(/databases/$(database)/documents/users/$(userId)/workouts/$(workoutId)).data.userId == userId &&
+        (
+          get(/databases/$(database)/documents/users/$(userId)/workouts/$(workoutId)).data.groupId == 'all' ||
+          get(/databases/$(database)/documents/users/$(userId)/workouts/$(workoutId)).data.groupId == groupId
+        );
+    }
+
+    function isValidTextMessage(data) {
+      return data.keys().hasOnly(['type', 'userId', 'text', 'createdAt']) &&
+        data.keys().hasAll(['type', 'userId', 'text', 'createdAt']) &&
+        data.type == 'text' &&
+        data.userId == request.auth.uid &&
+        isValidString(data.text, 1, 2000) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidWorkoutMessage(data) {
+      return data.keys().hasOnly([
+          'type', 'userId', 'workoutId', 'workoutDate', 'activityTypes',
+          'durationMinutes', 'groupNote', 'createdAt'
+        ]) &&
+        data.keys().hasAll([
+          'type', 'userId', 'workoutId', 'workoutDate', 'activityTypes',
+          'durationMinutes', 'groupNote', 'createdAt'
+        ]) &&
+        data.type == 'workout' &&
+        data.userId == request.auth.uid &&
+        isValidString(data.workoutId, 1, 1500) &&
+        data.workoutDate is timestamp &&
+        data.activityTypes is list &&
+        data.activityTypes.size() >= 1 &&
+        data.activityTypes.size() <= 12 &&
+        data.activityTypes.hasOnly(['Cardio', 'Strength', 'Flexibility', 'Sport', 'Other']) &&
+        data.durationMinutes is int &&
+        data.durationMinutes >= 0 &&
+        data.durationMinutes <= 1440 &&
+        isValidString(data.groupNote, 0, 1000) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidGoal(data) {
+      return data.keys().hasOnly([
+          'displayName', 'goalEntries', 'targetWorkouts', 'targetValue',
+          'goalDateISO', 'goalStartDateISO', 'goalDateReason',
+          'completedWorkouts', 'totalDurationMinutes', 'createdAt', 'updatedAt'
+        ]) &&
+        (!('displayName' in data) || isValidString(data.displayName, 0, 80)) &&
+        (!('goalEntries' in data) ||
+          (data.goalEntries is list && data.goalEntries.size() <= 20)) &&
+        isOptionalNullableNumber(data, 'targetWorkouts', 0, 10000) &&
+        isOptionalNullableNumber(data, 'targetValue', 0, 1000000) &&
+        isOptionalNullableString(data, 'goalDateISO', 10) &&
+        isOptionalNullableString(data, 'goalStartDateISO', 10) &&
+        isOptionalNullableString(data, 'goalDateReason', 500) &&
+        isOptionalNullableNumber(data, 'completedWorkouts', 0, 1000000) &&
+        isOptionalNullableNumber(data, 'totalDurationMinutes', 0, 100000000) &&
+        isOptionalTimestamp(data, 'createdAt') &&
+        data.updatedAt is timestamp;
+    }
+
+    match /users/{userId} {
+      allow read: if isSelf(userId);
+      allow create: if isSelf(userId) &&
+        isValidUser(request.resource.data) &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time;
+      allow update: if isSelf(userId) &&
+        isValidUser(request.resource.data) &&
+        request.resource.data.email == resource.data.email &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+
+      match /groups/{groupId} {
+        allow read: if isSelf(userId);
+        allow create, delete: if false;
+        allow update: if isSelf(userId) &&
+          isValidMembershipMirror(request.resource.data) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nickname', 'updatedAt']) &&
+          request.resource.data.joinedAt == resource.data.joinedAt &&
+          request.resource.data.updatedAt == request.time;
+      }
+
+      match /workouts/{workoutId} {
+        allow read: if isSelf(userId);
+        allow create: if isSelf(userId) &&
+          isValidWorkout(request.resource.data, userId) &&
+          isWorkoutGroupAllowed(request.resource.data) &&
+          request.resource.data.createdAt == request.time &&
+          request.resource.data.updatedAt == request.time;
+        allow update: if isSelf(userId) &&
+          isValidWorkout(request.resource.data, userId) &&
+          request.resource.data.userId == resource.data.userId &&
+          request.resource.data.groupId == resource.data.groupId &&
+          request.resource.data.createdAt == resource.data.createdAt &&
+          request.resource.data.updatedAt == request.time;
+        allow delete: if isSelf(userId);
+      }
+
+      match /notifications/{notificationId} {
+        allow read: if isSelf(userId);
+        allow create: if isSignedIn() &&
+          isValidNotification(request.resource.data, userId) &&
+          isGroupMember(request.resource.data.groupId) &&
+          exists(/databases/$(database)/documents/groups/$(request.resource.data.groupId)/members/$(userId)) &&
+          isCanonicalWorkoutForGroup(
+            request.resource.data.actorUserId,
+            request.resource.data.workoutId,
+            request.resource.data.groupId
+          ) &&
+          request.resource.data.createdAt == request.time;
+        allow update: if isSelf(userId) &&
+          isValidNotification(request.resource.data, userId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+        allow delete: if isSelf(userId);
+      }
+
+      match /private/settings {
+        allow read: if isSelf(userId);
+        allow create, update: if isSelf(userId) &&
+          isValidSettings(request.resource.data) &&
+          request.resource.data.updatedAt == request.time;
+        allow delete: if isSelf(userId);
+      }
+
+      match /private/{documentId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /groups/{groupId} {
+      allow read: if isGroupMember(groupId);
+      allow write: if false;
+
+      match /members/{memberId} {
+        allow read: if isGroupMember(groupId);
+        allow create, delete: if false;
+        allow update: if isSelf(memberId) &&
+          isGroupMember(groupId) &&
+          isValidMembership(request.resource.data, memberId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nickname', 'updatedAt']) &&
+          request.resource.data.role == resource.data.role &&
+          request.resource.data.joinDate == resource.data.joinDate &&
+          request.resource.data.updatedAt == request.time;
+      }
+
+      match /messages/{messageId} {
+        allow read: if isGroupMember(groupId);
+        allow create: if isGroupMember(groupId) &&
+          (
+            isValidTextMessage(request.resource.data) ||
+            (
+              isValidWorkoutMessage(request.resource.data) &&
+              isCanonicalWorkoutForGroup(
+                request.resource.data.userId,
+                request.resource.data.workoutId,
+                groupId
+              ) &&
+              get(
+                /databases/$(database)/documents/users/$(request.resource.data.userId)/workouts/$(request.resource.data.workoutId)
+              ).data.activityTypes == request.resource.data.activityTypes &&
+              get(
+                /databases/$(database)/documents/users/$(request.resource.data.userId)/workouts/$(request.resource.data.workoutId)
+              ).data.durationMinutes == request.resource.data.durationMinutes &&
+              get(
+                /databases/$(database)/documents/users/$(request.resource.data.userId)/workouts/$(request.resource.data.workoutId)
+              ).data.date == request.resource.data.workoutDate
+            )
+          ) &&
+          request.resource.data.createdAt == request.time;
+        allow update, delete: if false;
+      }
+
+      match /goals/{userId} {
+        allow read: if isGroupMember(groupId);
+        allow create, update: if isSelf(userId) &&
+          isGroupMember(groupId) &&
+          isValidGoal(request.resource.data) &&
+          request.resource.data.updatedAt == request.time;
+        allow delete: if isSelf(userId) && isGroupMember(groupId);
+      }
+    }
+
+    match /groupInvites/{inviteCode} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

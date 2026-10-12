@@ -150,17 +150,6 @@ export default function GoalSetupScreen() {
     }
     if (!displayName) displayName = user.uid.slice(0, 6);
 
-    // Ensure membership exists before writing goals
-    try {
-      await setDoc(
-        doc(db, "groups", params.groupId, "members", user.uid),
-        { userId: user.uid, joinDate: serverTimestamp() },
-        { merge: true }
-      );
-    } catch {
-      // non-fatal
-    }
-
     const goalRef = doc(db, "groups", params.groupId, "goals", user.uid);
     let existingGoalEntries: any[] | null = null;
     let hasExistingGoal = false;
