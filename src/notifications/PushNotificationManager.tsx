@@ -1,8 +1,9 @@
 import { useEffect } from "react";
 import { Platform } from "react-native";
+import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
-import { arrayUnion, serverTimestamp, setDoc } from "firebase/firestore";
+import { arrayUnion, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 
 import { useAuth } from "../auth/useAuth";
 import { userSettingsDoc } from "../firestore/paths";
@@ -30,6 +31,15 @@ export default function PushNotificationManager() {
     const register = async () => {
       if (!Device.isDevice) return;
 
+      // Expo Go can run before this project is linked to EAS. In that case
+      // there is no project to attribute a push token to.
+      const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+      if (!projectId) return;
+
+      const settingsRef = userSettingsDoc(user.uid);
+      const settings = await getDoc(settingsRef);
+      if (settings.data()?.notificationsEnabled === false) return;
+
       const existing = await Notifications.getPermissionsAsync();
       let finalStatus = existing.status;
       if (existing.status !== "granted") {
@@ -46,11 +56,11 @@ export default function PushNotificationManager() {
         });
       }
 
-      const token = (await Notifications.getExpoPushTokenAsync()).data;
+      const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
       if (!token || !isMounted) return;
 
       await setDoc(
-        userSettingsDoc(user.uid),
+        settingsRef,
         {
           expoPushTokens: arrayUnion(token),
           updatedAt: serverTimestamp(),
@@ -59,7 +69,9 @@ export default function PushNotificationManager() {
       );
     };
 
-    register();
+    void register().catch((error) => {
+      if (__DEV__) console.warn("Push notification registration failed", error);
+    });
 
     return () => {
       isMounted = false;
