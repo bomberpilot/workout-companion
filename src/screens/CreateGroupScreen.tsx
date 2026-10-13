@@ -56,7 +56,11 @@ export default function CreateGroupScreen() {
       });
       nav.navigate("GoalSetup", { groupId: result.groupId });
     } catch (e: any) {
-      Alert.alert("Create error", e?.message ?? "Something went wrong.");
+      const unavailable = e?.code === "functions/not-found" || e?.code === "functions/unavailable";
+      Alert.alert(
+        "Could not create group",
+        unavailable ? "Group creation is temporarily unavailable. Please try again later." : e?.message ?? "Please try again."
+      );
     } finally {
       setBusy(false);
     }

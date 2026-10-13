@@ -12,6 +12,12 @@ Authenticated read-only inspection on 2026-10-12 verified the default Standard/N
 
 Unknown: enabled Auth providers/settings; live function versions/region/runtime; registered native Firebase apps; production/staging separation.
 
+## Device finding: group callables are not deployed
+
+On 2026-10-13, an authenticated read-only `functions:list` request for `workout-companion-d078f` received `SERVICE_DISABLED` from the Cloud Functions API. The iOS Expo Go client receives `functions/not-found` when it calls `createGroup`. The same server dependency is used for joining and leaving groups. The repository contains tested callable implementations, but those operations cannot work against this project until the backend is provisioned and deployed.
+
+Firebase requires the Blaze billing plan for Cloud Functions deployment. Confirm the project's plan and intended development environment with the owner before linking billing or enabling APIs. Then deploy the callable Functions first, verify create/join/leave with test accounts, deploy the reviewed Firestore rules and indexes in a coordinated rollout, and repeat the device smoke path. The live rules currently have documented authorization gaps in [the security review](SECURITY_REVIEW.md); deploying rules alone against a client that expects the callables would block membership operations.
+
 Firebase and Google Cloud CLI access is available for read-only reconciliation. No live Firebase write or deployment is included in this security branch. Expo/EAS, signing and store-console access remain unverified.
 
 ## Needed for backend reconciliation

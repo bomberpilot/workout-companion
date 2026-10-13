@@ -1,6 +1,7 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -66,6 +67,7 @@ export default function LogWorkoutModal({
   const isContextual = !!groupId;
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView | null>(null);
+  const notesFocused = useRef(false);
   const { colors, radius, shadow, spacing, typography } = useTheme();
 
   const [activityTypes, setActivityTypes] = useState<string[]>([]);
@@ -91,10 +93,22 @@ export default function LogWorkoutModal({
     return h * 60 + m;
   }, [hours, minutes]);
 
+  useEffect(() => {
+    const subscription = Keyboard.addListener("keyboardDidShow", () => {
+      if (notesFocused.current) {
+        requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
+      }
+    });
+    return () => subscription.remove();
+  }, []);
+
   function scrollToNotes() {
-    setTimeout(() => {
-      scrollRef.current?.scrollToEnd({ animated: true });
-    }, 50);
+    notesFocused.current = true;
+    requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
+  }
+
+  function stopEditingNotes() {
+    notesFocused.current = false;
   }
 
   function toggleActivity(label: string) {
@@ -115,6 +129,7 @@ export default function LogWorkoutModal({
     setNotes("");
     setGroupNote("");
     setShowPicker(false);
+    notesFocused.current = false;
     setBusy(false);
   }
 
@@ -196,7 +211,7 @@ export default function LogWorkoutModal({
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
-          keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
+          keyboardVerticalOffset={0}
           style={{ flex: 1, justifyContent: "flex-end" }}
         >
           <View
@@ -243,7 +258,12 @@ export default function LogWorkoutModal({
 
             <ScrollView
               ref={scrollRef}
+              style={{ flexShrink: 1 }}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              onLayout={() => {
+                if (notesFocused.current) scrollRef.current?.scrollToEnd({ animated: true });
+              }}
               contentContainerStyle={{ paddingBottom: Math.max(spacing.xl, insets.bottom + spacing.xl) }}
               showsVerticalScrollIndicator={false}
             >
@@ -423,6 +443,7 @@ export default function LogWorkoutModal({
                 placeholder="Optional notes for your workout..."
                 multiline
                 onFocus={scrollToNotes}
+                onBlur={stopEditingNotes}
               />
 
               {/* Group-only caption (contextual) */}
@@ -445,6 +466,7 @@ export default function LogWorkoutModal({
                     placeholder="Optional caption just for this group..."
                     multiline
                     onFocus={scrollToNotes}
+                    onBlur={stopEditingNotes}
                   />
                 </>
               ) : null}

@@ -72,7 +72,7 @@ export default function SignInScreen() {
             textAlign: "center",
           }}
         >
-          Sign in, then start complaining productively.
+          Show up. Keep each other going.
         </Text>
 
         <Card style={{ marginTop: spacing.xl }}>

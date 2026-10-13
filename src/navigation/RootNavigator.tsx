@@ -44,7 +44,7 @@ export default function RootNavigator() {
           <Stack.Screen
             name="Home"
             component={HomeScreen}
-            options={{ title: "Workout Accountability Companion" }}
+            options={{ title: "Workout Companion" }}
           />
           <Stack.Screen name="CreateGroup" component={CreateGroupScreen} options={{ title: "Create group" }} />
           <Stack.Screen name="JoinGroup" component={JoinGroupScreen} options={{ title: "Join group" }} />

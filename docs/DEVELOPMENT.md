@@ -21,7 +21,24 @@ Expo embeds `EXPO_PUBLIC_*` values into the app. They are public client configur
 npm start
 ```
 
-Use the Expo development server with Expo Go for SDK 57 or a compatible development build. The existing `android` and `ios` scripts start Expo; they do not create signed native production builds. Remote push notifications are unavailable in Expo Go and require a physical device with an appropriate development build; token registration alone is not evidence that delivery works. Web parity is outside v1 scope.
+Use the Expo development server with Expo Go for SDK 57 or a compatible development build. The existing `android` and `ios` scripts start Expo; they do not create signed native production builds. Expo Go cannot test remote push notifications on Android; use a physical device with a development build for release acceptance on both platforms. Token registration alone is not evidence that delivery works. Web parity is outside v1 scope.
+
+To test Expo Go from another network, install Expo's tunnel helper once, then start Metro through the tunnel:
+
+```sh
+npm install --global @expo/ngrok@^4.1.0
+npm start -- --tunnel
+```
+
+On Windows with an npm global directory that Expo cannot resolve, run this in PowerShell before the second command:
+
+```powershell
+$env:NODE_PATH = npm root -g
+```
+
+Expo prints a new `exp://…exp.direct` URL and QR code. Keep Metro and the computer online while testing; the tunnel stops when Metro exits. A tunnel is slower than LAN and is meant for development, not app distribution. Do not reuse the old LAN URL from a different network.
+
+Push registration waits until an EAS project ID is present in Expo config and the user has not disabled notifications. This prevents an unhandled startup error in Expo Go before EAS is configured. A development build and physical-device delivery test are still required before notifications are release-ready.
 
 Firestore emulator validation is reproducible through the locked root tooling. Java 21 is required:
 
