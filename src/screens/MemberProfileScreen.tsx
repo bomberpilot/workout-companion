@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, where } from "firebase/firestore";
+import { doc, getDocs, limit, onSnapshot, query, serverTimestamp, setDoc, where } from "firebase/firestore";
 
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { useAuth } from "../auth/useAuth";
@@ -14,21 +14,17 @@ import { groupMemberDoc, messagesCol, userWorkoutsCol } from "../firestore/paths
 import Card from "../components/ui/Card";
 import SectionHeader from "../components/ui/SectionHeader";
 import { useTheme } from "../theme/ThemeProvider";
+import { countGoalWorkouts, readMemberGoals, type MemberGoal } from "../goals/memberGoals";
 
 type R = RouteProp<RootStackParamList, "MemberProfile">;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-type GoalEntry = {
-  id: string;
-  targetWorkouts: number;
-  completedWorkouts: number;
-  goalDateISO?: string;
-  goalStartDateISO?: string;
-  goalDateReason?: string;
-};
+type GoalEntry = MemberGoal;
 
 type WorkoutRow = {
   id: string;
+  groupId?: string;
+  performedAt?: any;
   activityTypes?: string[];
   durationMinutes?: number;
   date?: any;
@@ -37,35 +33,6 @@ type WorkoutRow = {
   workoutType?: string;
   notes?: string | null;
 };
-
-function readCompletedWorkouts(value: any) {
-  return Number(value ?? 0) || 0;
-}
-
-function getWorkoutMillis(item: WorkoutRow) {
-  const when = item.date ?? item.createdAt;
-  if (when?.toMillis) return when.toMillis();
-  if (when?.toDate) return when.toDate().getTime();
-  if (when instanceof Date) return when.getTime();
-  return 0;
-}
-
-function resolveGoalCompletedWorkouts(goal: GoalEntry, workouts: WorkoutRow[]) {
-  if (goal.goalStartDateISO && goal.goalDateISO) {
-    const start = parseISOToUTCDate(goal.goalStartDateISO);
-    const end = parseISOToUTCDate(goal.goalDateISO);
-    if (start && end) {
-      const startMs = start.getTime();
-      const endMs = end.getTime() + 86400000 - 1;
-      return workouts.reduce((sum, workout) => {
-        const ms = getWorkoutMillis(workout);
-        if (ms >= startMs && ms <= endMs) return sum + 1;
-        return sum;
-      }, 0);
-    }
-  }
-  return readCompletedWorkouts(goal.completedWorkouts);
-}
 
 export default function MemberProfileScreen() {
   const { params } = useRoute<R>();
@@ -92,9 +59,9 @@ export default function MemberProfileScreen() {
     () =>
       goals.map((goal) => ({
         ...goal,
-        displayCompletedWorkouts: resolveGoalCompletedWorkouts(goal, workouts),
+        displayCompletedWorkouts: isSelf ? countGoalWorkouts(goal, params.groupId, workouts) : goal.completedWorkouts,
       })),
-    [goals, workouts]
+    [goals, isSelf, params.groupId, workouts]
   );
 
   useEffect(() => {
@@ -111,29 +78,7 @@ export default function MemberProfileScreen() {
         setGoals([]);
         return;
       }
-      const g = snap.data() as any;
-      if (Array.isArray(g?.goalEntries)) {
-        const entries = g.goalEntries.map((entry: any, idx: number) => ({
-          id: entry?.id ?? `${snap.id}-${idx}`,
-          targetWorkouts: Number(entry?.targetWorkouts ?? entry?.targetValue ?? 0) || 0,
-          completedWorkouts: readCompletedWorkouts(entry?.completedWorkouts),
-          goalDateISO: typeof entry?.goalDateISO === "string" ? entry.goalDateISO : undefined,
-          goalStartDateISO: typeof entry?.goalStartDateISO === "string" ? entry.goalStartDateISO : undefined,
-          goalDateReason: typeof entry?.goalDateReason === "string" ? entry.goalDateReason : undefined,
-        }));
-        setGoals(entries);
-      } else {
-        setGoals([
-          {
-            id: snap.id,
-            targetWorkouts: Number(g?.targetWorkouts ?? g?.targetValue ?? 0) || 0,
-            completedWorkouts: readCompletedWorkouts(g?.completedWorkouts),
-            goalDateISO: typeof g?.goalDateISO === "string" ? g.goalDateISO : undefined,
-            goalStartDateISO: typeof g?.goalStartDateISO === "string" ? g.goalStartDateISO : undefined,
-            goalDateReason: typeof g?.goalDateReason === "string" ? g.goalDateReason : undefined,
-          },
-        ]);
-      }
+      setGoals(readMemberGoals(snap.data(), snap.id));
     });
 
     const unsubMember = onSnapshot(groupMemberDoc(params.groupId, params.userId), (snap) => {
@@ -157,17 +102,19 @@ export default function MemberProfileScreen() {
     (async () => {
       try {
         const wQuery = isSelf
-          ? query(userWorkoutsCol(params.userId), orderBy("createdAt", "desc"), limit(40))
+          ? userWorkoutsCol(params.userId)
           : query(messagesCol(params.groupId), where("userId", "==", params.userId), limit(100));
         const wSnap = await getDocs(wQuery);
         const rows = wSnap.docs.flatMap((d) => {
           const data = d.data() as any;
           if (!isSelf && data?.type !== "workout") return [];
           if (isSelf) {
+            if (data?.groupId !== params.groupId && data?.groupId !== "all") return [];
             return [{ id: d.id, ...(data as Omit<WorkoutRow, "id">) }];
           }
           return [{
             id: typeof data.workoutId === "string" ? data.workoutId : d.id,
+            groupId: params.groupId,
             activityTypes: Array.isArray(data.activityTypes) ? data.activityTypes : [],
             durationMinutes: Number(data.durationMinutes ?? 0) || 0,
             date: data.workoutDate ?? data.createdAt,
@@ -536,7 +483,9 @@ function getWorkoutTime(item: WorkoutRow) {
 function formatGoalDate(iso: string) {
   const parsed = parseISOToUTCDate(iso);
   if (!parsed) return iso;
-  return formatFriendlyDate(parsed);
+  return parsed.toLocaleDateString("en-GB", {
+    day: "numeric", month: "short", year: "numeric", timeZone: "UTC",
+  });
 }
 
 function formatFriendlyDate(d: Date) {
@@ -555,7 +504,8 @@ function parseISOToUTCDate(iso: string) {
   const mo = Number(m[2]);
   const da = Number(m[3]);
   if (mo < 1 || mo > 12 || da < 1 || da > 31) return null;
-  return new Date(Date.UTC(y, mo - 1, da));
+  const date = new Date(Date.UTC(y, mo - 1, da));
+  return date.toISOString().slice(0, 10) === iso ? date : null;
 }
 
 function GoalTile({

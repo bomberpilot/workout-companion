@@ -213,9 +213,6 @@ export const createGroup = functions.https.onCall(async (rawData, context) => {
   const groupRef = db.collection("groups").doc();
   const memberRef = groupRef.collection("members").doc(userId);
   const mirrorRef = db.collection("users").doc(userId).collection("groups").doc(groupRef.id);
-  const startDate = admin.firestore.Timestamp.now();
-  const endDate = admin.firestore.Timestamp.fromMillis(startDate.toMillis() + 30 * 24 * 60 * 60 * 1000);
-
   for (let attempt = 0; attempt < 12; attempt += 1) {
     const inviteCode = makeInviteCode();
     const inviteRef = db.collection("groupInvites").doc(inviteCode);
@@ -233,10 +230,6 @@ export const createGroup = functions.https.onCall(async (rawData, context) => {
           createdBy: userId,
           createdAt: now,
           updatedAt: now,
-          goalType: "frequency",
-          targetValue: 12,
-          startDate,
-          endDate,
         });
         transaction.create(inviteRef, {
           groupId: groupRef.id,

@@ -15,7 +15,7 @@
     "test": "npm run test:app && npm --prefix functions test && npm run test:firestore",
     "build:check": "expo export --platform ios --platform android",
     "check": "npm run typecheck && npm run typecheck:functions && npm run lint && npm run doctor && npm test && npm run build:check",
-    "test:app": "node --test tests/firebase-auth.test.cjs",
+    "test:app": "node --test tests/firebase-auth.test.cjs tests/member-goals.test.cjs",
     "test:firestore": "npm --prefix functions run build && firebase emulators:exec --only firestore --project demo-workout-companion \"node --test --test-concurrency=1 tests/firestore-rules.test.cjs tests/group-lifecycle-emulator.test.cjs\"",
     "dependencies:report": "node scripts/dependency-report.cjs"
   },

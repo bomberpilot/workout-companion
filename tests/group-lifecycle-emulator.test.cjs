@@ -49,10 +49,10 @@ test("createGroup atomically creates the group, owner membership, mirror, and in
     db.doc("groupInvites/" + result.inviteCode).get(),
   ]);
   assert.equal(group.get("createdBy"), "alice");
-  assert.equal(group.get("goalType"), "frequency");
-  assert.equal(group.get("targetValue"), 12);
-  assert.equal(group.get("startDate") instanceof admin.firestore.Timestamp, true);
-  assert.equal(group.get("endDate") instanceof admin.firestore.Timestamp, true);
+  assert.equal(group.get("goalType"), undefined);
+  assert.equal(group.get("targetValue"), undefined);
+  assert.equal(group.get("startDate"), undefined);
+  assert.equal(group.get("endDate"), undefined);
   assert.equal(member.get("role"), "owner");
   assert.equal(mirror.get("role"), "owner");
   assert.equal(invite.get("groupId"), result.groupId);
