@@ -1,5 +1,5 @@
 import React, { useRef } from "react";
-import { Animated, Pressable, Text, View } from "react-native";
+import { Animated, Pressable, Text } from "react-native";
 
 import { useTheme } from "../../theme/ThemeProvider";
 

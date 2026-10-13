@@ -81,7 +81,6 @@ export default function GroupProgressScreen() {
   const nav = useNavigation<Nav>();
   const { user, initializing } = useAuth();
   const { colors, spacing } = useTheme();
-  const [rows, setRows] = useState<Row[]>([]);
   const [goalRows, setGoalRows] = useState<GoalRow[]>([]);
   const [memberNames, setMemberNames] = useState<Record<string, string>>({});
   const [group, setGroup] = useState<GroupMeta>({});
@@ -149,7 +148,7 @@ export default function GroupProgressScreen() {
     return unsub;
   }, [initializing, params.groupId, user]);
 
-  useEffect(() => {
+  const rows = useMemo(() => {
     const nextRows: Row[] = goalRows.map((row) => ({
       userId: row.userId,
       target: row.target,
@@ -166,7 +165,7 @@ export default function GroupProgressScreen() {
       return rb - ra || b.completed - a.completed;
     });
 
-    setRows(nextRows);
+    return nextRows;
   }, [goalRows, memberNames]);
 
   function confirmLeaveGroup() {

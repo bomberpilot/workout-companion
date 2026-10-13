@@ -1,12 +1,12 @@
 # Dependency advisory triage
 
-Snapshot refreshed locally on 2026-10-10 after Expo SDK 54 dependency alignment. Reproduce with `npm run dependencies:report`; the audit service can change over time.
+Snapshot refreshed locally on 2026-10-12 after the incremental Expo SDK 54 → 55 → 56 → 57 upgrade. Reproduce with `npm run dependencies:report`; the audit service can change over time.
 
-The native-auth slice did not change dependency versions. The following stabilization slice aligned Expo SDK 54 patch versions, installed required native peers, and removed a duplicate native module reported by Expo Doctor. The advisory report remains informational and fails on audit-service/invalid-response errors, not on valid advisories. It must not be described as a passing security gate.
+The SDK 57 slice aligned Expo, React Native, React, TypeScript and native modules through each intervening SDK, migrated the legacy splash configuration, and passed Expo Doctor. The advisory report remains informational and fails on audit-service/invalid-response errors, not on valid advisories. It must not be described as a passing security gate.
 
 | Lockfile | Critical | High | Moderate | Low | Total affected package entries |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| App | 3 | 33 | 17 | 1 | 54 |
+| App | 2 | 28 | 18 | 1 | 49 |
 | Functions | 4 | 5 | 12 | 1 | 22 |
 
 Counts may overlap between graphs and do not equal distinct exploitable vulnerabilities. Reachability in shipped native bundles, deployed functions or build tooling has not yet been established. Lower severity entries remain in the reproducible JSON inventory.
@@ -49,6 +49,6 @@ The advisory column links one highest-severity advisory per package from the ear
 1. Inspect dependency chains and runtime reachability for backend parsing/network packages, especially protobufjs, fast-xml-parser, websocket-driver and @grpc/grpc-js. Review compatible patch/minor lockfile updates first and validate the exported-callable tests plus backend/emulator operations.
 2. Review shared app Firebase/network packages and build/tooling advisories, including protobufjs, websocket-driver, undici, tar and shell-quote. Do not assume a Node-oriented package is absent from the release without inspecting the resolved graph/bundle.
 3. Re-run both audits after each reviewed update and preserve mobile/backend TypeScript, all regression tests and both bundle exports. Changes to Auth require the physical-device session smoke cases; deployed functions require reviewed staging validation.
-4. Handle unavoidable major upgrades in a separate aligned dependency PR. npm currently suggests Expo 57.0.26, expo-notifications 57.0.21 and firebase-admin 14.5.0 for some entries. Those are audit-service suggestions, not verified compatibility recommendations; keep Expo/React Native packages aligned and preserve the existing Functions API or explicitly migrate/test it.
+4. Handle unavoidable major upgrades in a separate aligned dependency PR. The app is aligned on Expo 57.0.28 and React Native 0.86.3; npm's current suggested downgrades to Expo 44, React Native 0.72 and datetimepicker 8.1 are incompatible with that SDK and must not be applied. Audit-service suggestions are not verified compatibility recommendations; keep Expo/React Native packages aligned and preserve the existing Functions API or explicitly migrate/test it.
 
 Do not run `npm audit fix --force` to erase the report. Security/rules, server-owned membership and canonical-workout corrections remain release-critical alongside dependency remediation.
