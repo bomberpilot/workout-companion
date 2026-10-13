@@ -11,9 +11,9 @@ import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import SectionHeader from "../components/ui/SectionHeader";
 import { groupDoc, groupMembersCol } from "../firestore/paths";
-import { formatDurationMinutes } from "../utils/progress";
 import { useTheme } from "../theme/ThemeProvider";
 import { leaveGroup as leaveGroupAction } from "../firestore/actions";
+import { readMemberGoals, type MemberGoal } from "../goals/memberGoals";
 
 type R = RouteProp<RootStackParamList, "GroupProgress">;
 type Nav = NativeStackNavigationProp<RootStackParamList, "GroupProgress">;
@@ -21,21 +21,12 @@ type Nav = NativeStackNavigationProp<RootStackParamList, "GroupProgress">;
 type Row = {
   userId: string;
   displayName: string;
-  target: number;
-  completed: number;
-  totalDurationMinutes: number;
-  goalDateISO?: string;
-  goalDateReason?: string;
+  goals: MemberGoal[];
 };
 
 type GoalRow = {
-  userId: string;
-  target: number;
-  completed: number;
-  totalDurationMinutes: number;
   displayName?: string;
-  goalDateISO?: string;
-  goalDateReason?: string;
+  goals: MemberGoal[];
 };
 
 type GroupMeta = {
@@ -47,22 +38,11 @@ function clamp01(x: number) {
   return Math.max(0, Math.min(1, x));
 }
 
-function readCompletedWorkouts(value: any) {
-  return Number(value ?? 0) || 0;
-}
-
 function formatGoalDate(iso: string) {
   const parsed = parseISOToUTCDate(iso);
   if (!parsed) return iso;
-  return formatFriendlyDate(parsed);
-}
-
-function formatFriendlyDate(d: Date) {
-  return d.toLocaleDateString("en-GB", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
+  return parsed.toLocaleDateString("en-GB", {
+    day: "numeric", month: "short", year: "numeric", timeZone: "UTC",
   });
 }
 
@@ -73,7 +53,8 @@ function parseISOToUTCDate(iso: string) {
   const mo = Number(m[2]);
   const da = Number(m[3]);
   if (mo < 1 || mo > 12 || da < 1 || da > 31) return null;
-  return new Date(Date.UTC(y, mo - 1, da));
+  const date = new Date(Date.UTC(y, mo - 1, da));
+  return date.toISOString().slice(0, 10) === iso ? date : null;
 }
 
 export default function GroupProgressScreen() {
@@ -81,7 +62,7 @@ export default function GroupProgressScreen() {
   const nav = useNavigation<Nav>();
   const { user, initializing } = useAuth();
   const { colors, spacing } = useTheme();
-  const [goalRows, setGoalRows] = useState<GoalRow[]>([]);
+  const [goalRows, setGoalRows] = useState<Record<string, GoalRow>>({});
   const [memberNames, setMemberNames] = useState<Record<string, string>>({});
   const [group, setGroup] = useState<GroupMeta>({});
 
@@ -91,23 +72,11 @@ export default function GroupProgressScreen() {
     return onSnapshot(
       goalsRef,
       (snap) => {
-        const next: GoalRow[] = snap.docs.map((d) => {
+        const next: Record<string, GoalRow> = {};
+        snap.docs.forEach((d) => {
           const gd = d.data() as any;
-          const target = Number(gd?.targetWorkouts ?? 0) || 0;
-          const completed = readCompletedWorkouts(gd?.completedWorkouts);
-          const totalDurationMinutes = Number(gd?.totalDurationMinutes ?? 0) || 0;
           const displayName = String(gd?.displayName ?? "").trim() || d.id.slice(0, 6);
-          const goalDateISO = typeof gd?.goalDateISO === "string" ? gd.goalDateISO : undefined;
-          const goalDateReason = typeof gd?.goalDateReason === "string" ? gd.goalDateReason : undefined;
-          return {
-            userId: d.id,
-            displayName,
-            target,
-            completed,
-            totalDurationMinutes,
-            goalDateISO,
-            goalDateReason,
-          };
+          next[d.id] = { displayName, goals: readMemberGoals(gd, d.id) };
         });
 
         setGoalRows(next);
@@ -137,9 +106,7 @@ export default function GroupProgressScreen() {
         const next: Record<string, string> = {};
         snap.docs.forEach((docSnap) => {
           const nick = (docSnap.data() as any)?.nickname;
-          if (typeof nick === "string" && nick.trim().length) {
-            next[docSnap.id] = nick.trim();
-          }
+          next[docSnap.id] = typeof nick === "string" && nick.trim().length ? nick.trim() : docSnap.id.slice(0, 6);
         });
         setMemberNames(next);
       },
@@ -149,21 +116,13 @@ export default function GroupProgressScreen() {
   }, [initializing, params.groupId, user]);
 
   const rows = useMemo(() => {
-    const nextRows: Row[] = goalRows.map((row) => ({
-      userId: row.userId,
-      target: row.target,
-      completed: row.completed,
-      totalDurationMinutes: row.totalDurationMinutes,
-      displayName: memberNames[row.userId] ?? row.displayName ?? row.userId.slice(0, 6),
-      goalDateISO: row.goalDateISO,
-      goalDateReason: row.goalDateReason,
+    const nextRows: Row[] = Object.keys(memberNames).map((userId) => ({
+      userId,
+      displayName: memberNames[userId] ?? goalRows[userId]?.displayName ?? userId.slice(0, 6),
+      goals: goalRows[userId]?.goals ?? [],
     }));
 
-    nextRows.sort((a, b) => {
-      const ra = a.target ? a.completed / a.target : 0;
-      const rb = b.target ? b.completed / b.target : 0;
-      return rb - ra || b.completed - a.completed;
-    });
+    nextRows.sort((a, b) => a.displayName.localeCompare(b.displayName));
 
     return nextRows;
   }, [goalRows, memberNames]);
@@ -209,17 +168,17 @@ export default function GroupProgressScreen() {
       <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.sm }}>
         <SectionHeader
           title={group.name?.trim()?.length ? group.name : "Group progress"}
-          subtitle="Track momentum across every member's goal."
+          subtitle="See what each person is working toward."
         />
       </View>
       <FlatList
         data={rows}
         keyExtractor={(r) => r.userId}
-        renderItem={({ item }) => <ProgressRow row={item} />}
+        renderItem={({ item }) => <ProgressRow row={item} onPress={() => nav.navigate("MemberProfile", { groupId: params.groupId, userId: item.userId })} />}
         ListEmptyComponent={
           <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.sm }}>
             <Text style={{ color: colors.text.muted }}>
-              No goals found yet for this group.
+              No members found yet for this group.
             </Text>
           </View>
         }
@@ -243,79 +202,31 @@ export default function GroupProgressScreen() {
   );
 }
 
-function ProgressRow({ row }: { row: Row }) {
+function ProgressRow({ row, onPress }: { row: Row; onPress: () => void }) {
   const { colors, radius, spacing, typography } = useTheme();
-  const pct = useMemo(() => (row.target ? clamp01(row.completed / row.target) : 0), [row.completed, row.target]);
-  const totalTimeLabel = useMemo(() => formatDurationMinutes(row.totalDurationMinutes || 0), [row.totalDurationMinutes]);
-  const reason = row.goalDateReason?.trim() || "Why is this date important?";
-  const targetLabel = row.goalDateISO ? formatGoalDate(row.goalDateISO) : "No target date";
-
   return (
-    <Card style={{ marginHorizontal: spacing.lg, marginBottom: spacing.md }}>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" }}>
-        <Text style={{ fontSize: typography.size.md, fontWeight: typography.weight.bold, color: colors.text.primary }}>
-          {row.displayName}
-        </Text>
-        <Text style={{ color: colors.text.secondary, fontWeight: typography.weight.semibold }}>
-          {row.completed} / {row.target || "—"}
-        </Text>
-      </View>
-
-      <View
-        style={{
-          position: "relative",
-          marginTop: spacing.sm,
-          marginBottom: spacing.sm,
-          minHeight: typography.lineHeight.normal,
-          justifyContent: "center",
-        }}
-      >
-        <Text
-          style={{
-            textAlign: "center",
-            fontWeight: typography.weight.medium,
-            color: row.goalDateReason ? colors.text.primary : colors.text.muted,
-          }}
-        >
-          {reason}
-        </Text>
-        <View
-          style={{
-            position: "absolute",
-            right: 0,
-            top: 0,
-            paddingHorizontal: spacing.sm,
-            paddingVertical: spacing.xs,
-            borderRadius: radius.pill,
-            backgroundColor: colors.surface.cardAlt,
-          }}
-        >
-          <Text style={{ fontSize: typography.size.xs, fontWeight: typography.weight.semibold, color: colors.text.secondary }}>
-            {targetLabel}
-          </Text>
-        </View>
-      </View>
-
-      <View
-        style={{
-          height: spacing.xs,
-          borderRadius: radius.pill,
-          backgroundColor: colors.surface.cardAlt,
-          marginTop: spacing.sm,
-          overflow: "hidden",
-        }}
-      >
-        <View style={{ width: `${pct * 100}%`, height: "100%", backgroundColor: colors.accent.primary }} />
-      </View>
-
-      <View style={{ marginTop: spacing.sm, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <Text style={{ color: colors.text.muted, fontSize: typography.size.xs }}>
-          {row.target ? `${Math.round(pct * 100)}%` : "Set a target to track progress"}
-        </Text>
-        <Text style={{ color: colors.text.muted, fontSize: typography.size.xs, fontWeight: typography.weight.medium }}>
-          Total Workout Time: {totalTimeLabel}
-        </Text>
-      </View>
+    <Card onPress={onPress} style={{ marginHorizontal: spacing.lg, marginBottom: spacing.md }}>
+      <Text style={{ fontSize: typography.size.md, fontWeight: typography.weight.bold, color: colors.text.primary }}>
+        {row.displayName} ›
+      </Text>
+      {row.goals.length === 0 ? (
+        <Text style={{ color: colors.text.muted, marginTop: spacing.sm }}>No personal goals yet. Tap to view this member.</Text>
+      ) : row.goals.map((goal) => {
+        const pct = clamp01(goal.completedWorkouts / goal.targetWorkouts);
+        return (
+          <View key={goal.id} style={{ marginTop: spacing.md }}>
+            <Text style={{ color: colors.text.primary, fontWeight: typography.weight.semibold }}>
+              {goal.goalDateReason || `${goal.targetWorkouts} workouts`}
+            </Text>
+            <Text style={{ color: colors.text.muted, fontSize: typography.size.sm, marginTop: spacing.xs }}>
+              {goal.completedWorkouts} of {goal.targetWorkouts} workouts{goal.goalDateISO ? ` · by ${formatGoalDate(goal.goalDateISO)}` : ""}
+            </Text>
+            <View style={{ height: spacing.xs, borderRadius: radius.pill, backgroundColor: colors.surface.cardAlt, marginTop: spacing.sm, overflow: "hidden" }}>
+              <View style={{ width: `${pct * 100}%`, height: "100%", backgroundColor: colors.accent.primary }} />
+            </View>
+          </View>
+        );
+      })}
     </Card>
   );
 }

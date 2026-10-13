@@ -1,12 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Alert, Dimensions, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { Dimensions, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import {
-  collection,
-  doc,
-  getDocs,
   limit,
   onSnapshot,
   orderBy,
@@ -18,8 +15,6 @@ import {
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { useAuth } from "../auth/useAuth";
 import {
-  groupDoc,
-  userGroupsCol,
   userNotificationDoc,
   userNotificationsCol,
   userSettingsDoc,
@@ -31,103 +26,23 @@ import { useTheme } from "../theme/ThemeProvider";
 import Card from "../components/ui/Card";
 import SectionHeader from "../components/ui/SectionHeader";
 import PrimaryActionButton from "../components/ui/PrimaryActionButton";
+import { useMemberGroupGoals } from "../goals/useMemberGroupGoals";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "Home">;
-
-type GoalCard = {
-  groupId: string;
-  groupName: string;
-  inviteCode?: string;
-  targetWorkouts?: number;
-  goalDateISO?: string;
-};
 
 export default function HomeScreen() {
   const nav = useNavigation<Nav>();
   const { user } = useAuth();
   const { colors, radius, spacing, typography } = useTheme();
 
-  const [cards, setCards] = useState<GoalCard[]>([]);
+  const { groups, loading: groupsLoading, error: groupsError } = useMemberGroupGoals(user?.uid);
   const [showLog, setShowLog] = useState(false);
-  const [globalCompleted, setGlobalCompleted] = useState(0);
   const [notificationFeed, setNotificationFeed] = useState<{ userId: string; items: AppNotification[] }>({
     userId: "",
     items: [],
   });
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const notifications = user?.uid === notificationFeed.userId ? notificationFeed.items : [];
-
-  // Global workout count for current user (MVP: all-time)
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      try {
-        const snap = await getDocs(collection(db, "users", user.uid, "workouts"));
-        setGlobalCompleted(snap.size);
-      } catch {
-        // non-fatal
-      }
-    })();
-  }, [user]);
-
-  // Subscribe to user's groups and hydrate minimal tile data
-  useEffect(() => {
-    if (!user) return;
-
-    let childUnsubs: (() => void)[] = [];
-    const clearChildren = () => {
-      childUnsubs.forEach((unsubscribe) => unsubscribe());
-      childUnsubs = [];
-    };
-
-    const unsub = onSnapshot(
-      query(userGroupsCol(user.uid)),
-      (snap) => {
-        clearChildren();
-        const groupIds = snap.docs.map((d) => d.id);
-        const next: Record<string, GoalCard> = {};
-        setCards([]);
-
-        for (const gid of groupIds) {
-          const u1 = onSnapshot(groupDoc(gid), (gs) => {
-            const g = gs.data() as any;
-            next[gid] = {
-              ...(next[gid] ?? { groupId: gid, groupName: "Group" }),
-              groupId: gid,
-              groupName: g?.name ?? "Group",
-              inviteCode: g?.inviteCode,
-            };
-            setCards(Object.values(next));
-          });
-
-          const u2 = onSnapshot(
-            doc(db, "groups", gid, "goals", user.uid),
-            (goalSnap) => {
-              const gd = goalSnap.data() as any;
-              const primaryGoal =
-                Array.isArray(gd?.goalEntries) && gd.goalEntries.length > 0 ? gd.goalEntries[0] : gd;
-              next[gid] = {
-                ...(next[gid] ?? { groupId: gid, groupName: "Group" }),
-                groupId: gid,
-                targetWorkouts: primaryGoal?.targetWorkouts ?? undefined,
-                goalDateISO: primaryGoal?.goalDateISO ?? undefined,
-              };
-              setCards(Object.values(next));
-            },
-            (err) => Alert.alert("Goal error", err.message)
-          );
-
-          childUnsubs.push(u1, u2);
-        }
-      },
-      (err) => Alert.alert("Home error", err.message)
-    );
-
-    return () => {
-      unsub();
-      clearChildren();
-    };
-  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -190,16 +105,6 @@ export default function HomeScreen() {
     }
   }
 
-  async function refreshWorkoutCount() {
-    if (!user) return;
-    try {
-      const snap = await getDocs(collection(db, "users", user.uid, "workouts"));
-      setGlobalCompleted(snap.size);
-    } catch (e: any) {
-      Alert.alert("Log workout error", e?.message ?? "Something went wrong.");
-    }
-  }
-
   const width = Dimensions.get("window").width;
   const sidePadding = spacing.xl;
   const tileGap = spacing.sm;
@@ -208,22 +113,29 @@ export default function HomeScreen() {
     return Math.floor(usable / 2);
   }, [sidePadding, tileGap, width]);
 
-  const primaryGoal = useMemo(() => cards.find((card) => card.targetWorkouts) ?? cards[0], [cards]);
+  const featuredGroup = groups.find((group) => group.goals.length > 0);
+  const primaryGoal = featuredGroup?.goals[0];
   const targetWorkouts = primaryGoal?.targetWorkouts ?? 0;
-  const progressRatio = targetWorkouts ? globalCompleted / targetWorkouts : 0;
+  const completed = primaryGoal?.completed ?? 0;
+  const progressRatio = targetWorkouts ? completed / targetWorkouts : 0;
   const progressLabel = targetWorkouts
-    ? `${globalCompleted} of ${targetWorkouts} workouts`
-    : "Set a goal to start tracking momentum";
+    ? `${completed} of ${targetWorkouts} workouts in ${featuredGroup?.groupName}`
+    : "Set a personal goal in a group";
 
   const visibleNotifications = notifications.slice(0, 2); // Keep height stable for the no-scroll layout.
   const remainingNotifications = notifications.length - visibleNotifications.length;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background.primary }}>
-      <View style={{ flex: 1, paddingHorizontal: sidePadding, paddingTop: spacing.xl, paddingBottom: spacing.lg }}>
+      <ScrollView contentContainerStyle={{ flexGrow: 1, paddingHorizontal: sidePadding, paddingTop: spacing.xl, paddingBottom: spacing.lg }}>
         <View style={{ marginBottom: spacing.xl }}>
-          <SectionHeader title="Momentum" subtitle="Stay calm and consistent—small steps add up." />
-          <Card style={{ marginTop: spacing.md }}>
+          <SectionHeader title="Your commitments" subtitle="Show up for the goals you set." />
+          <Card
+            style={{ marginTop: spacing.md }}
+            onPress={groups.length ? () => featuredGroup && user
+              ? nav.navigate("MemberProfile", { groupId: featuredGroup.groupId, userId: user.uid })
+              : nav.navigate("GoalSetup", { groupId: groups[0].groupId }) : undefined}
+          >
             <Text style={{ color: colors.text.primary, fontSize: typography.size.lg, fontWeight: typography.weight.bold }}>
               {progressLabel}
             </Text>
@@ -235,7 +147,7 @@ export default function HomeScreen() {
                 lineHeight: typography.lineHeight.relaxed,
               }}
             >
-              {targetWorkouts ? "Momentum is based on your primary group goal." : "Choose a group goal to see progress."}
+              {targetWorkouts ? "Tap to see all your goals in this group." : "Tap to set a goal that fits you."}
             </Text>
             <View
               style={{
@@ -263,17 +175,18 @@ export default function HomeScreen() {
             style={{ marginTop: spacing.lg }}
           />
           <FlatList
-            data={cards}
+            data={groups}
             horizontal
             keyExtractor={(i) => i.groupId}
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: spacing.xs }}
             ItemSeparatorComponent={() => <View style={{ width: tileGap }} />}
             renderItem={({ item }) => {
-              const target = item.targetWorkouts ?? 0;
-              const ratio = target ? globalCompleted / target : 0;
-              const progressText = target ? `${globalCompleted}/${target} complete` : "Set a goal";
-              const subtitle = item.inviteCode ? `Invite: ${item.inviteCode}` : "Invite: —";
+              const goal = item.goals[0];
+              const target = goal?.targetWorkouts ?? 0;
+              const ratio = target ? goal.completed / target : 0;
+              const progressText = target ? `${goal.completed}/${target} · ${item.goals.length} goal${item.goals.length === 1 ? "" : "s"}` : "Set your goal";
+              const subtitle = goal?.goalDateISO ? `By ${goal.goalDateISO}` : "Your group";
 
               return (
                 <Card style={{ width: tileWidth }} onPress={() => nav.navigate("Chat", { groupId: item.groupId })}>
@@ -330,7 +243,7 @@ export default function HomeScreen() {
             }}
             ListEmptyComponent={
               <Text style={{ color: colors.text.muted, fontSize: typography.size.sm }}>
-                No groups yet. Create or join one to begin.
+                {groupsLoading ? "Loading your groups…" : groupsError ? `Unable to load groups: ${groupsError}` : "No groups yet. Create or join one to begin."}
               </Text>
             }
           />
@@ -490,14 +403,14 @@ export default function HomeScreen() {
             </Pressable>
           </View>
         </View>
-      </View>
+      </ScrollView>
 
       {user ? (
         <LogWorkoutModal
           visible={showLog}
           onClose={() => setShowLog(false)}
           userId={user.uid}
-          onLogged={refreshWorkoutCount}
+          onLogged={() => {}}
         />
       ) : null}
     </View>

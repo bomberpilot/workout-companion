@@ -24,11 +24,11 @@ export type Group = {
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 
-  // NEW: group goal settings
-  goalType: GroupGoalType;     // "frequency" | "duration"
-  targetValue: number;         // workouts count OR minutes
-  startDate: Timestamp;
-  endDate: Timestamp;
+  // Legacy group-wide goal settings. New groups use per-member goal documents.
+  goalType?: GroupGoalType;
+  targetValue?: number;
+  startDate?: Timestamp;
+  endDate?: Timestamp;
 };
 
 export type GroupMember = {

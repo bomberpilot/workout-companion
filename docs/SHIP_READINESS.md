@@ -69,7 +69,7 @@ A global log already creates **one** workout, then separate conversation project
 | Workout logging | PARTIAL | Date/category/notes and one canonical write exist; duration is mandatory, contrary to lowest-friction count-based intent; no idempotency |
 | Multi-group sharing | PARTIAL | One workout plus sequential cards/counters/notifications; failure after canonical write leaves partial fan-out and retry duplicates |
 | Workout edit/delete | BROKEN | Edit updates date but not performedAt; server reads performedAt first; chat snapshots and duration totals stay stale. No workout deletion workflow |
-| Home/accountability | BROKEN | All-time global count is divided by each goal target rather than applicable period workouts; child Firestore subscriptions are not cleaned up |
+| Home/accountability | PARTIAL | Personal group-goal progress now counts applicable canonical workouts in each goal period, and child listeners are cleaned up; device behavior and large-history performance need verification |
 | Group chat | PARTIAL | Realtime chronological/inverted list and text writes; composer clears before await, no send/error state, no pagination/loading/empty state |
 | Workout cards | PARTIAL | Canonical reference plus copied details; legacy fallback hydration; copy fields do not follow edits; hardcoded styles |
 | Notifications | PARTIAL | Permission flow/tokens/in-app records exist; push helper unused, no delivery worker/receipts/token cleanup/tap navigation; toggle does not govern registration/fan-out |
@@ -94,7 +94,7 @@ A global log already creates **one** workout, then separate conversation project
 | P1 | `EditWorkoutModal` leaves performedAt unchanged; backend prefers it over edited date; duplicated chat cards/time totals not repaired | Release blocker for edit integrity |
 | P1 | Client increment counters coexist with server recompute triggers; counts can race; duration totals are incremental and never recomputed | Release blocker for reliable progress |
 | P1 | Local midnight workout dates versus UTC goal windows/labels; goal parsers permit rollover; picker conversion mutates month/date in separate steps | Release blocker for boundary dates/timezones; agree and test one calendar-date policy |
-| P1 | `HomeScreen` uses all-time count for period goals, returns cleanup from an onSnapshot callback (ignored), and attaches listeners after async membership writes | Release blocker for correct status, stale listeners and account-switch privacy |
+| P1 | Home formerly used an all-time count for every group goal and leaked child listeners; the member-goal overview slice corrects these, but account-switch/device verification remains | Verify on devices before release |
 | P1 | Home/chat/progress/goal setup write membership while viewing; leave navigates before sequential deletion; nested listeners can add a departing user again | Release blocker for lifecycle/authz design |
 | P1 | Create/join/leave and nickname mirrors are non-atomic; duplicate joins overwrite membership/owner role; invites use Math.random without unique reservation | Release blocker for group lifecycle |
 | P1 | The 2026-10-12 dependency report lists 49 app dependency advisories (2 critical, 28 high) and 22 backend advisories (4 critical, 5 high); reachability/production impact is not yet assessed | Release blocker pending detailed inventory and compatible remediation |
@@ -200,6 +200,10 @@ A CI dependency report inventories both existing lockfiles before selecting comp
 At implementation commit `ac779fed2bf9d0fad84842c10f62d1e520ae09ed`, [GitHub Actions run 36974789056](https://github.com/bomberpilot/workout-companion/actions/runs/36974789056) passed clean installs, both TypeScript checks, all 7 app initialization tests, all 9 backend authorization tests, and iOS/Android Metro/Hermes exports. Installed-package inspection confirmed Firebase 12.7.0 / @firebase/auth 1.12.0 supplies a React Native conditional entrypoint. Mocked tests and exports do not establish physical-device persistence.
 
 The informational dependency inventory passed and, when refreshed on 2026-10-10, reported 54 app / 22 backend affected package entries. See [dependency triage](DEPENDENCY_TRIAGE.md) for package evidence and remediation order. These unresolved advisories remain release concerns; a successful informational report is not security approval.
+
+### Member-goal overview follow-up
+
+[Decision 002](decisions/002-member-goals-per-group.md) confirms that goals belong to individual members within each group. The home screen now shows group-scoped progress, the account profile rolls up the owner's goals by group, and group progress presents every member's goals without ranking people. The existing member profile remains the detailed view for group-specific goals and activity. New groups no longer receive a hidden default group-wide target. App tests cover group/date workout counting and legacy goal documents; physical multi-user verification remains outstanding. Group creation is still blocked in the test Firebase project until Cloud Functions are deployed, as recorded in [backend setup](BACKEND_SETUP.md).
 
 ### Live backend reconciliation
 
