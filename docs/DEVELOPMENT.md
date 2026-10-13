@@ -2,7 +2,7 @@
 
 ## Install
 
-Use Node 22.14.0 (recorded in `.nvmrc`) and npm. The app's locked React Native 0.81.5 requires Node >=20.19.4. Keep both existing npm lockfiles; this is not an npm workspace.
+Use Node 22.14.0 (recorded in `.nvmrc`) and npm. Expo SDK 57 requires Node >=22.13.0. Keep both existing npm lockfiles; this is not an npm workspace.
 
 ```sh
 nvm use
@@ -21,7 +21,7 @@ Expo embeds `EXPO_PUBLIC_*` values into the app. They are public client configur
 npm start
 ```
 
-Use the Expo development server with a compatible device/development build. The existing `android` and `ios` scripts start Expo; they do not create signed native production builds. SDK 54 push behavior needs a physical device and an appropriate development build; token registration alone is not evidence that delivery works. Web parity is outside v1 scope.
+Use the Expo development server with Expo Go for SDK 57 or a compatible development build. The existing `android` and `ios` scripts start Expo; they do not create signed native production builds. Remote push notifications are unavailable in Expo Go and require a physical device with an appropriate development build; token registration alone is not evidence that delivery works. Web parity is outside v1 scope.
 
 Firestore emulator validation is reproducible through the locked root tooling. Java 21 is required:
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -77,7 +77,7 @@ export default function EditWorkoutModal({ visible, onClose, workout, userId, on
   const [notes, setNotes] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
 
-  useEffect(() => {
+  function resetForm() {
     if (!workout) return;
     const date = getWorkoutDate(workout);
     const duration = Math.max(0, Math.floor(Number(workout.durationMinutes || 0)));
@@ -88,7 +88,7 @@ export default function EditWorkoutModal({ visible, onClose, workout, userId, on
     setDateText(formatDateYYYYMMDD(date));
     setNotes(String(workout.notes ?? ""));
     setShowPicker(false);
-  }, [workout]);
+  }
 
   const durationMinutes = useMemo(() => {
     const h = Math.max(0, Math.floor(Number(hours || 0)));
@@ -160,7 +160,7 @@ export default function EditWorkoutModal({ visible, onClose, workout, userId, on
   }
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose} onShow={resetForm}>
       <View
         style={{
           flex: 1,

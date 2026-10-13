@@ -14,7 +14,7 @@ Status vocabulary: **DONE** = artifact/implementation verified within its stated
 
 | Area | Current implementation |
 | --- | --- |
-| Client | Expo 54.0.37, React Native 0.81.5, React 19.1.0, TypeScript 5.9.3 in the lockfile; new architecture enabled |
+| Client | Expo 57.0.28, React Native 0.86.3, React 19.2.3, TypeScript 6.0.3 in the lockfile; the New Architecture is required by current Expo SDKs |
 | Package manager | npm; lockfile v3 at root and separately in `functions/`; no workspace configuration |
 | Entrypoint/navigation | `index.ts` registers root `App.tsx`, which re-exports `src/app/App.tsx`; React Navigation 7 native stack, auth-gated routes |
 | State | React hooks/context for auth/theme; screen-local state and Firestore listeners; no separate global state framework |
@@ -22,12 +22,12 @@ Status vocabulary: **DONE** = artifact/implementation verified within its stated
 | Authentication | Firebase 12.7.0 email/password; `onAuthStateChanged`; intended AsyncStorage persistence |
 | Database | Firestore client SDK directly in screens and `src/firestore/actions.ts`; Admin SDK in Cloud Functions |
 | Backend | firebase-admin 12.7.0, firebase-functions 4.9.0, TypeScript; v1 Firestore triggers and callable progress recompute |
-| Notifications | Expo Notifications 0.32.15; permission/token registration and client-written notification documents; no verified push delivery |
+| Notifications | Expo Notifications 57.0.22; permission/token registration and client-written notification documents; no verified push delivery |
 | Analytics/crashes | PostHog dependency installed, but both analytics source files are empty; no initialized crash/error reporter found |
 | Environment | Six `EXPO_PUBLIC_FIREBASE_*` values read directly; baseline example empty, no runtime validation; duplicated unused `env.ts` |
 | Checks at baseline | No tests/CI/lint/format suite; backend `build` uses tsc; backend `lint` is only echo |
 | Deployment | This security branch adds `firebase.json`, prototype Firestore rules/indexes and emulator tests without a default production project mapping. No tracked `eas.json`, EAS project ID/owner, native app identifiers or deployment evidence. |
-| Native | Managed Expo configuration, icons/splash, portrait orientation, edge-to-edge Android; native folders ignored; no signing/build evidence |
+| Native | Managed Expo configuration, icons and `expo-splash-screen` plugin, portrait orientation, SDK-default edge-to-edge Android; SDK 57 targets Android API 36 and requires iOS 16.4+; native folders ignored; no signing/build evidence |
 | Tooling | Existing `ios/android` scripts only start Expo. Windows-only zip helper. VS Code task applies an empty `patches/codex.patch` |
 
 ### Screens and routes
@@ -97,7 +97,7 @@ A global log already creates **one** workout, then separate conversation project
 | P1 | `HomeScreen` uses all-time count for period goals, returns cleanup from an onSnapshot callback (ignored), and attaches listeners after async membership writes | Release blocker for correct status, stale listeners and account-switch privacy |
 | P1 | Home/chat/progress/goal setup write membership while viewing; leave navigates before sequential deletion; nested listeners can add a departing user again | Release blocker for lifecycle/authz design |
 | P1 | Create/join/leave and nickname mirrors are non-atomic; duplicate joins overwrite membership/owner role; invites use Math.random without unique reservation | Release blocker for group lifecycle |
-| P1 | The 2026-10-10 dependency report lists 54 app dependency advisories (3 critical, 33 high) and 22 backend advisories (4 critical, 5 high); reachability/production impact is not yet assessed | Release blocker pending detailed inventory and compatible remediation |
+| P1 | The 2026-10-12 dependency report lists 49 app dependency advisories (2 critical, 28 high) and 22 backend advisories (4 critical, 5 high); reachability/production impact is not yet assessed | Release blocker pending detailed inventory and compatible remediation |
 | P1 | Account creation fires auth change before profile write is guaranteed; no repair/profile completion gate; native auth persistence initialization unverified | Release blocker pending session/golden-path tests |
 | P1 | Chat composer drops text before write and has no failure catch; profile save/logout/goal setup/push registration include unhandled async failures | Release blocker for user-visible reliability |
 | P1 | `GoalSetup` lacks submit busy/duplicate protection; root and entry-array goal copies drift on reorder/edit and read-modify-write updates race | Release blocker for goal correctness |
@@ -182,6 +182,11 @@ The refreshed report lists **54 app dependency advisories** (1 low, 17 moderate,
 
 The successful exports show that the current dependency graph bundles; they do not verify auth persistence, backend access or device runtime. No signed native build, device smoke test, live Firebase rule verification, formatting suite or store acceptance has been completed. The scoped callable fix is committed but not deployed.
 
+## Expo SDK 57 compatibility follow-up
+
+The client was upgraded incrementally through SDK 55 and 56 to SDK 57.0.28, with dependency alignment and Expo Doctor checks at each step. The legacy splash object was migrated to the supported `expo-splash-screen` plugin; obsolete New Architecture and edge-to-edge flags were removed because current Expo SDKs enforce those defaults. React 19 lint findings were resolved without disabling the new rules by deriving progress rows during render, resetting modal forms from `onShow`, and keeping drag refs inside responder callbacks.
+
+Local validation on 2026-10-12 passed app and Functions TypeScript, Expo lint, a 21/21 Expo Doctor run, all 7 auth tests, all 9 Functions tests, the dependency inventory, and iOS/Android Metro/Hermes exports. A later Doctor retry was interrupted only by a TLS failure reaching Expo's schema API. The Firestore emulator suites could not start locally because Java is unavailable on this Windows host; GitHub CI remains required for that test and for clean-install reproducibility. Successful exports do not replace Expo Go/device smoke testing or signed native builds.
 ## Native auth stabilization follow-up
 
 [Decision 001](decisions/001-keep-firebase-for-v1.md) retains Firebase for the MVP because the identified blockers are implementation issues, not verified provider limits. See [backend setup](BACKEND_SETUP.md) for the owner-reported project ID and owner-confirmed test-data status and the unknown deployed configuration.

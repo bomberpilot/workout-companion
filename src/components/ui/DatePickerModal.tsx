@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Modal, View, Text, Pressable, Platform } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
@@ -38,15 +38,17 @@ export default function DatePickerModal({
 }) {
   const [temp, setTemp] = useState<Date>(() => dateFromISO(initialDateISO));
 
-  useEffect(() => {
-    if (visible) setTemp(dateFromISO(initialDateISO));
-  }, [visible, initialDateISO]);
-
   const minDate = useMemo(() => (minDateISO ? dateFromISO(minDateISO) : undefined), [minDateISO]);
   const maxDate = useMemo(() => (maxDateISO ? dateFromISO(maxDateISO) : undefined), [maxDateISO]);
 
   return (
-    <Modal visible={visible} animationType="slide" transparent presentationStyle="overFullScreen">
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      presentationStyle="overFullScreen"
+      onShow={() => setTemp(dateFromISO(initialDateISO))}
+    >
       <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.35)", justifyContent: "flex-end" }}>
         {/* Backdrop: only this closes the modal */}
         <Pressable style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} onPress={onClose} />

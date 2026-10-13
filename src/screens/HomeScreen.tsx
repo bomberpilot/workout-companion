@@ -50,8 +50,12 @@ export default function HomeScreen() {
   const [cards, setCards] = useState<GoalCard[]>([]);
   const [showLog, setShowLog] = useState(false);
   const [globalCompleted, setGlobalCompleted] = useState(0);
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [notificationFeed, setNotificationFeed] = useState<{ userId: string; items: AppNotification[] }>({
+    userId: "",
+    items: [],
+  });
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const notifications = user?.uid === notificationFeed.userId ? notificationFeed.items : [];
 
   // Global workout count for current user (MVP: all-time)
   useEffect(() => {
@@ -142,7 +146,6 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (!user || !notificationsEnabled) {
-      setNotifications([]);
       return;
     }
 
@@ -154,9 +157,12 @@ export default function HomeScreen() {
           id: docSnap.id,
           ...(docSnap.data() as Omit<AppNotification, "id">),
         }));
-        setNotifications(next.filter((notification) => !notification.read));
+        setNotificationFeed({
+          userId: user.uid,
+          items: next.filter((notification) => !notification.read),
+        });
       },
-      () => setNotifications([])
+      () => setNotificationFeed({ userId: user.uid, items: [] })
     );
 
     return unsub;

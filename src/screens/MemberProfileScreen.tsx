@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, FlatList, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, where } from "firebase/firestore";
@@ -75,7 +75,6 @@ export default function MemberProfileScreen() {
   const [displayName, setDisplayName] = useState(params.userId.slice(0, 6));
   const [groupNickname, setGroupNickname] = useState<string | null>(null);
   const [nickname, setNickname] = useState("");
-  const [dirtyNickname, setDirtyNickname] = useState(false);
   const [savingNickname, setSavingNickname] = useState(false);
   const [showNicknameEditor, setShowNicknameEditor] = useState(false);
   const [goals, setGoals] = useState<GoalEntry[]>([]);
@@ -83,9 +82,10 @@ export default function MemberProfileScreen() {
   const [editingWorkout, setEditingWorkout] = useState<WorkoutRow | null>(null);
   const [showWorkoutEditor, setShowWorkoutEditor] = useState(false);
   const [draggingGoalId, setDraggingGoalId] = useState<string | null>(null);
+  const [dragPosition, setDragPosition] = useState(0);
   const [goalContainerHeight, setGoalContainerHeight] = useState(0);
   const dragStartOffset = useRef(0);
-  const dragPosition = useRef(0);
+  const dragTouchStartY = useRef(0);
   const goalLayouts = useRef<Record<string, { y: number; height: number }>>({});
   const isSelf = user?.uid === params.userId;
   const goalsWithProgress = useMemo(
@@ -153,11 +153,6 @@ export default function MemberProfileScreen() {
   }, [initializing, isSelf, params.groupId, params.userId, user]);
 
   useEffect(() => {
-    if (!isSelf || dirtyNickname) return;
-    setNickname(groupNickname ?? "");
-  }, [dirtyNickname, groupNickname, isSelf]);
-
-  useEffect(() => {
     if (initializing || !user) return;
     (async () => {
       try {
@@ -204,7 +199,14 @@ export default function MemberProfileScreen() {
     Alert.alert("Member options", "Choose an action", [
       {
         text: showNicknameEditor ? "Hide nickname editor" : "Edit nickname",
-        onPress: () => setShowNicknameEditor((prev) => !prev),
+        onPress: () => {
+          if (showNicknameEditor) {
+            setShowNicknameEditor(false);
+            return;
+          }
+          setNickname(groupNickname ?? "");
+          setShowNicknameEditor(true);
+        },
       },
       { text: "Cancel", style: "cancel" },
     ]);
@@ -260,7 +262,6 @@ export default function MemberProfileScreen() {
         { nickname: trimmed, updatedAt: serverTimestamp() },
         { merge: true }
       );
-      setDirtyNickname(false);
       setShowNicknameEditor(false);
       Alert.alert("Saved", "Your nickname for this group was updated.");
     } catch (err: any) {
@@ -299,7 +300,7 @@ export default function MemberProfileScreen() {
     if (!layout) return;
     setDraggingGoalId(goal.id);
     dragStartOffset.current = layout.y;
-    dragPosition.current = layout.y;
+    setDragPosition(layout.y);
   }
 
   function handleGoalMove(dy: number) {
@@ -309,9 +310,10 @@ export default function MemberProfileScreen() {
 
     const start = dragStartOffset.current;
     const nextPosition = start + dy;
-    dragPosition.current = Math.max(0, Math.min(nextPosition, Math.max(0, goalContainerHeight - 1)));
+    const boundedPosition = Math.max(0, Math.min(nextPosition, Math.max(0, goalContainerHeight - 1)));
+    setDragPosition(boundedPosition);
 
-    const nextIndex = getGoalIndexForPosition(draggingGoalId, dragPosition.current);
+    const nextIndex = getGoalIndexForPosition(draggingGoalId, boundedPosition);
     if (nextIndex === -1 || nextIndex === currentIndex) return;
 
     setGoals((prev) => moveArrayItem(prev, currentIndex, nextIndex));
@@ -337,23 +339,6 @@ export default function MemberProfileScreen() {
     }
     return sorted.length - 1;
   }
-
-  const goalPanResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: () => !!draggingGoalId,
-      onPanResponderMove: (_, gesture) => {
-        handleGoalMove(gesture.dy);
-      },
-      onPanResponderRelease: () => {
-        finishGoalDrag();
-      },
-      onPanResponderTerminationRequest: () => true,
-      onPanResponderTerminate: () => {
-        finishGoalDrag();
-      },
-    })
-  ).current;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background.primary }}>
@@ -402,7 +387,6 @@ export default function MemberProfileScreen() {
                   value={nickname}
                   onChangeText={(value) => {
                     setNickname(value);
-                    setDirtyNickname(true);
                   }}
                   placeholder="e.g., Chief"
                 />
@@ -422,7 +406,17 @@ export default function MemberProfileScreen() {
 
             <View
               onLayout={(event) => setGoalContainerHeight(event.nativeEvent.layout.height)}
-              {...goalPanResponder.panHandlers}
+              onStartShouldSetResponder={() => false}
+              onMoveShouldSetResponder={() => !!draggingGoalId}
+              onResponderGrant={(event) => {
+                dragTouchStartY.current = event.nativeEvent.pageY;
+              }}
+              onResponderMove={(event) => {
+                handleGoalMove(event.nativeEvent.pageY - dragTouchStartY.current);
+              }}
+              onResponderRelease={finishGoalDrag}
+              onResponderTerminationRequest={() => true}
+              onResponderTerminate={finishGoalDrag}
             >
               {goalsWithProgress.map((goal) => {
                 const isDragging = draggingGoalId === goal.id;
@@ -453,7 +447,7 @@ export default function MemberProfileScreen() {
                     position: "absolute",
                     left: 0,
                     right: 0,
-                    top: dragPosition.current,
+                    top: dragPosition,
                     zIndex: 10,
                     paddingHorizontal: spacing.lg,
                   }}
