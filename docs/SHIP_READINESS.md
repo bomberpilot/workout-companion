@@ -4,7 +4,7 @@
 
 Audited baseline: `a382cf03a4f18ce7d9f879b8123de7069048bb47` on `main`. Reviewed the complete, non-truncated tree, all 61 non-lock text files and both npm lockfiles. No `AGENTS.md` exists. PNG asset files are present; their appearance, dimensions and suitability for store use have not been verified.
 
-This is a source audit, not a claim of runtime acceptance. GitHub read/write access was demonstrated. This chat has no attached local terminal/checkout; first-slice verification uses GitHub Actions where available. No deployed Firebase configuration, rules, data, signing credentials, console settings, physical devices or store consoles were inspected. Current-source scans found no obvious private-key/token credentials, but history scans and a detailed dependency-advisory inventory still need execution.
+This is a source audit, not a claim of runtime acceptance. GitHub read/write access was demonstrated. On 2026-10-12, authenticated read-only inspection verified the live default Firestore database metadata, deployed rules, and index inventory. No production data contents, signing credentials, physical devices or store consoles were inspected. Current-source scans found no obvious private-key/token credentials.
 
 The user-provided production roadmap is the product contract. Repository evidence is authoritative for what exists. The app is not production ready.
 
@@ -26,7 +26,7 @@ Status vocabulary: **DONE** = artifact/implementation verified within its stated
 | Analytics/crashes | PostHog dependency installed, but both analytics source files are empty; no initialized crash/error reporter found |
 | Environment | Six `EXPO_PUBLIC_FIREBASE_*` values read directly; baseline example empty, no runtime validation; duplicated unused `env.ts` |
 | Checks at baseline | No tests/CI/lint/format suite; backend `build` uses tsc; backend `lint` is only echo |
-| Deployment | No tracked `eas.json`, EAS project ID/owner, native app identifiers, `firebase.json`, Firestore rules/indexes or Firebase project mapping |
+| Deployment | This security branch adds `firebase.json`, prototype Firestore rules/indexes and emulator tests without a default production project mapping. No tracked `eas.json`, EAS project ID/owner, native app identifiers or deployment evidence. |
 | Native | Managed Expo configuration, icons/splash, portrait orientation, edge-to-edge Android; native folders ignored; no signing/build evidence |
 | Tooling | Existing `ios/android` scripts only start Expo. Windows-only zip helper. VS Code task applies an empty `patches/codex.patch` |
 
@@ -78,7 +78,7 @@ A global log already creates **one** workout, then separate conversation project
 | Loading/error/empty states | PARTIAL | Some alerts, busy buttons and empty text; silent catches/blank loading/unhandled async actions remain |
 | Offline/degraded network | MISSING | No deliberate offline/pending/retry UX or configured durable Firestore caching; AsyncStorage is used for intended auth persistence only |
 | Design/accessibility | PARTIAL | Calm semantic theme exists, but Button/TextField/chat/goals/editor still use hardcoded light styles; no full a11y/device-size audit |
-| Privacy/security enforcement | MISSING | No rules/indexes/emulator tests in source; deployed enforcement unknown; callable vulnerability confirmed at baseline |
+| Privacy/security enforcement | PARTIAL | Live permissive rules are verified. This branch adds a default-deny prototype, adversarial emulator tests, server-owned group lifecycle, and private-read cleanup; review and coordinated deployment remain. |
 | Essential observability | MISSING | Analytics source empty; no crash reporting initialization |
 | iOS/Android production delivery | MISSING | App IDs, EAS profiles/environments/signing/version codes not recorded; no native build evidence |
 | Store/privacy assets | MISSING | No privacy inventory/disclosures, hosted policy/support/deletion URLs, metadata/review notes/screenshots package |
@@ -88,8 +88,8 @@ A global log already creates **one** workout, then separate conversation project
 | Priority | Finding and source | Classification |
 | --- | --- | --- |
 | P0 | `functions/src/index.ts: recomputeGoalProgress` permits arbitrary target userId and does not check group membership; Admin SDK bypasses rules | Release blocker; first slice restricts callers to self + existing membership |
-| P0 | No committed Firestore rules or authorization tests; screens can write their own group-member records just by opening a route | Release blocker; missing source is not proof of deployed public access, but production privacy cannot be verified |
-| P0 | `MemberProfileScreen` queries all of another user's latest 40 workouts and profile containing email without group visibility filtering | Release blocker; scoped projections/rules must prevent private cross-group or personal-data exposure |
+| P0 | Deployed rules permit broad profile/workout reads and self-enrollment | Release blocker; this branch adds reviewed source, emulator tests, callable membership operations and client compatibility changes, but the live policy is unchanged until coordinated deployment |
+| P0 | Baseline `MemberProfileScreen` queried another user's private profile and latest 40 canonical workouts | This branch replaces those reads with group-scoped message projections and owner-only rules; coordinated deployment/client rollout remains required |
 | P1 | `actions.ts` writes workout/cards/counters separately, has no idempotency and can return failure after permanent canonical creation | Release blocker; retries and partial fan-out risk inconsistent/duplicate records |
 | P1 | `EditWorkoutModal` leaves performedAt unchanged; backend prefers it over edited date; duplicated chat cards/time totals not repaired | Release blocker for edit integrity |
 | P1 | Client increment counters coexist with server recompute triggers; counts can race; duration totals are incremental and never recomputed | Release blocker for reliable progress |
@@ -109,7 +109,7 @@ A global log already creates **one** workout, then separate conversation project
 
 No explicit TODO/FIXME markers were found. Several comments marked NEW/legacy and empty modules represent unfinished work. No hardcoded privileged credentials were found in current text. Clean CI installs reported dependency advisories; a detailed npm audit inventory, production reachability assessment, git-history scan and deployed logging review are still required. Logs include user/group IDs and some raw errors; production observability must minimize sensitive content.
 
-No indexes are committed. Inventory actual queries and emulator/production missing-index responses, especially invite lookup, message ordering, member workout visibility and backend groupId applicability. Do not invent index requirements from filenames alone.
+The live database has no composite indexes or field overrides. This branch commits the matching empty index configuration. Emulator tests exercise message ordering, member workout projections and owner queries; add composite indexes only when an implemented query and emulator/production response requires one.
 
 ## Privacy inventory seed (source evidence, not store-form answers)
 
@@ -196,6 +196,6 @@ At implementation commit `ac779fed2bf9d0fad84842c10f62d1e520ae09ed`, [GitHub Act
 
 The informational dependency inventory passed and, when refreshed on 2026-10-10, reported 54 app / 22 backend affected package entries. See [dependency triage](DEPENDENCY_TRIAGE.md) for package evidence and remediation order. These unresolved advisories remain release concerns; a successful informational report is not security approval.
 
-### Owner-supplied backend configuration
+### Live backend reconciliation
 
-The owner provided the current rules text and reports no custom indexes. [Security review](SECURITY_REVIEW.md) identifies broad private reads, invitation/group enumeration, unrestricted self-enrollment, message author takeover and other data-validation gaps. Rules compilation/emulator execution is still pending. The next security slice must change membership/invite operations and the affected client reads together with rules so the golden path continues to work. Email/Password provider status is awaiting owner confirmation; [backend setup](BACKEND_SETUP.md) gives Console navigation steps.
+Authenticated inspection confirmed the deployed rules and absence of custom indexes. [Security review](SECURITY_REVIEW.md) identifies broad private reads, invitation/group enumeration, unrestricted self-enrollment, message author takeover and other data-validation gaps. The Firestore security branch coordinates prototype rules with callable create/join/leave operations and affected client reads. Email/Password provider status is still awaiting verification; [backend setup](BACKEND_SETUP.md) gives Console navigation steps.

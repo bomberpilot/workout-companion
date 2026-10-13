@@ -23,7 +23,13 @@ npm start
 
 Use the Expo development server with a compatible device/development build. The existing `android` and `ios` scripts start Expo; they do not create signed native production builds. SDK 54 push behavior needs a physical device and an appropriate development build; token registration alone is not evidence that delivery works. Web parity is outside v1 scope.
 
-Backend emulator startup is not yet reproducible: there is no committed `firebase.json`, emulator/rules configuration or Firebase CLI dependency. Do not assume `npm --prefix functions run serve` works until the backend-security follow-up establishes these.
+Firestore emulator validation is reproducible through the locked root tooling. Java 21 is required:
+
+```sh
+npm run test:firestore
+```
+
+The command compiles Functions, starts only the Firestore emulator with synthetic data under `demo-workout-companion`, runs the rules and group-lifecycle suites serially, and shuts the emulator down. It does not read or write the live Firebase project.
 
 ## Mechanical checks
 
@@ -39,7 +45,7 @@ npm run check
 
 - `typecheck` checks mobile entrypoints and `src` with Expo's strict configuration.
 - `typecheck:functions` checks the backend using its own dependencies/configuration.
-- `test` runs app auth initialization regressions, then compiles the backend and runs Node's test runner against the exported callable. SDK boundaries are mocked; this does not test deployed Firestore rules.
+- `test` runs app auth initialization regressions, callable authorization tests, and Firestore emulator suites for adversarial rules and atomic group lifecycle behavior. The emulator uses synthetic data; this does not test deployed Firestore rules.
 - `build:check` exports iOS and Android Metro bundles. It does not compile/sign native binaries, launch the app, or exercise authentication.
 - CI runs independent check steps even after another check fails, so defects remain visible.
 

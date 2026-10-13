@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -15,19 +15,15 @@ import { useHeaderHeight } from "@react-navigation/elements";
 import { Ionicons } from "@expo/vector-icons";
 import {
   addDoc,
-  doc,
-  getDoc,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
-  setDoc,
 } from "firebase/firestore";
 
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { useAuth } from "../auth/useAuth";
-import { db } from "../config/firebase";
-import { groupDoc, groupMembersCol, messagesCol, userWorkoutDoc } from "../firestore/paths";
+import { groupDoc, groupMembersCol, messagesCol } from "../firestore/paths";
 import MessageTile from "../components/chat/MessageTile";
 import ComposerBar from "../components/chat/ComposerBar";
 import LogWorkoutModal from "../components/workout/LogWorkoutModal";
@@ -39,12 +35,6 @@ type R = RouteProp<RootStackParamList, "Chat">;
 type Nav = NativeStackNavigationProp<RootStackParamList, "Chat">;
 
 type GroupMeta = { name?: string; inviteCode?: string };
-type WorkoutDetails = {
-  activityTypes?: string[];
-  durationMinutes?: number;
-  notes?: string;
-};
-
 function fallbackName(uid: string) {
   return uid.slice(0, 6);
 }
@@ -58,14 +48,8 @@ export default function GroupChatScreen() {
 
   const [group, setGroup] = useState<GroupMeta>({});
   const [messages, setMessages] = useState<any[]>([]);
-  const [nameMap, setNameMap] = useState<Record<string, string>>({});
   const [groupNameMap, setGroupNameMap] = useState<Record<string, string>>({});
   const [showLog, setShowLog] = useState(false);
-  const inflight = useRef<Set<string>>(new Set());
-  const [workoutDetails, setWorkoutDetails] = useState<Record<string, WorkoutDetails>>({});
-
-  const workoutKey = (userId?: string, workoutId?: string) =>
-    userId && workoutId ? `${userId}:${workoutId}` : "";
 
   // Header buttons
   useEffect(() => {
@@ -133,7 +117,19 @@ export default function GroupChatScreen() {
         </View>
       ),
     });
-  }, [nav, params.groupId, group?.name, user, colors]);
+  }, [
+    nav,
+    params.groupId,
+    group?.name,
+    user,
+    colors,
+    radius.md,
+    spacing.sm,
+    spacing.xs,
+    typography.size.sm,
+    typography.size.xl,
+    typography.weight.semibold,
+  ]);
 
   // Group meta
   useEffect(() => {
@@ -152,33 +148,12 @@ export default function GroupChatScreen() {
   // Messages
   useEffect(() => {
     if (!user) return;
-    let active = true;
-    let unsub = () => {};
-
-    (async () => {
-      try {
-        await setDoc(
-          doc(db, "groups", params.groupId, "members", user.uid),
-          { userId: user.uid, joinDate: serverTimestamp() },
-          { merge: true }
-        );
-      } catch {
-        // non-fatal
-      }
-
-      if (!active) return;
-      const q = query(messagesCol(params.groupId), orderBy("createdAt", "desc"));
-      unsub = onSnapshot(
-        q,
-        (snap) => setMessages(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))),
-        (err) => Alert.alert("Chat error", err.message)
-      );
-    })();
-
-    return () => {
-      active = false;
-      unsub();
-    };
+    const q = query(messagesCol(params.groupId), orderBy("createdAt", "desc"));
+    return onSnapshot(
+      q,
+      (snap) => setMessages(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))),
+      (err) => Alert.alert("Chat error", err.message)
+    );
   }, [params.groupId, user]);
 
   // Group member nicknames
@@ -200,98 +175,6 @@ export default function GroupChatScreen() {
     );
     return unsub;
   }, [initializing, params.groupId, user]);
-
-  // Resolve user display names lazily
-  useEffect(() => {
-    const ids = Array.from(new Set(messages.map((m) => m.userId).filter(Boolean)));
-    const missing = ids.filter(
-      (uid) => !nameMap[uid] && !groupNameMap[uid] && !inflight.current.has(uid)
-    );
-    if (!missing.length) return;
-
-    (async () => {
-      const updates: Record<string, string> = {};
-      for (const uid of missing) {
-        inflight.current.add(uid);
-        try {
-          const snap = await getDoc(doc(db, "users", uid));
-          const dn = (snap.data() as any)?.displayName;
-          updates[uid] = typeof dn === "string" && dn.trim().length ? dn.trim() : fallbackName(uid);
-        } catch {
-          updates[uid] = fallbackName(uid);
-        } finally {
-          inflight.current.delete(uid);
-        }
-      }
-      if (Object.keys(updates).length) setNameMap((p) => ({ ...p, ...updates }));
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages]);
-
-  useEffect(() => {
-    const missing = messages.filter((message) => {
-      const m = message as any;
-      if (m?.type !== "workout") return false;
-      if (!m?.userId || !m?.workoutId) return false;
-      const key = workoutKey(m.userId, m.workoutId);
-      if (!key || workoutDetails[key]) return false;
-      if (Array.isArray(m.activityTypes) && m.activityTypes.length) return false;
-      return true;
-    });
-
-    if (!missing.length) return;
-
-    let active = true;
-
-    (async () => {
-      const updates: Record<string, WorkoutDetails> = {};
-      for (const message of missing) {
-        const m = message as any;
-        const key = workoutKey(m.userId, m.workoutId);
-        if (!key || updates[key]) continue;
-        try {
-          const snap = await getDoc(userWorkoutDoc(m.userId, m.workoutId));
-          if (!snap.exists()) continue;
-          const data = snap.data() as WorkoutDetails;
-          updates[key] = {
-            activityTypes: Array.isArray(data.activityTypes) ? data.activityTypes : undefined,
-            durationMinutes:
-              typeof data.durationMinutes === "number" ? data.durationMinutes : undefined,
-            notes: typeof data.notes === "string" ? data.notes : undefined,
-          };
-        } catch {
-          // ignore single-message failures
-        }
-      }
-      if (!active || !Object.keys(updates).length) return;
-      setWorkoutDetails((prev) => ({ ...prev, ...updates }));
-    })();
-
-    return () => {
-      active = false;
-    };
-  }, [messages, workoutDetails]);
-
-  const messagesWithDetails = useMemo(() => {
-    return messages.map((message) => {
-      const m = message as any;
-      if (m?.type !== "workout") return message;
-      const key = workoutKey(m.userId, m.workoutId);
-      const details = key ? workoutDetails[key] : undefined;
-      if (!details) return message;
-      return {
-        ...m,
-        activityTypes: Array.isArray(m.activityTypes) && m.activityTypes.length
-          ? m.activityTypes
-          : details.activityTypes,
-        durationMinutes:
-          typeof m.durationMinutes === "number" && m.durationMinutes > 0
-            ? m.durationMinutes
-            : details.durationMinutes,
-        workoutNotes: details.notes,
-      };
-    });
-  }, [messages, workoutDetails]);
 
   async function sendText(text: string) {
     if (!user) return;
@@ -332,7 +215,7 @@ export default function GroupChatScreen() {
         </View>
 
         <FlatList
-          data={messagesWithDetails}
+          data={messages}
           inverted
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: spacing["3xl"] * 4 }} // Reserve space for composer + primary action.
@@ -342,7 +225,7 @@ export default function GroupChatScreen() {
             const uid = item.userId as string | undefined;
             const isMine = !!user && !!uid && uid === user.uid;
             const displayName = uid
-              ? groupNameMap[uid] ?? nameMap[uid] ?? fallbackName(uid)
+              ? groupNameMap[uid] ?? fallbackName(uid)
               : "System";
 
             return (

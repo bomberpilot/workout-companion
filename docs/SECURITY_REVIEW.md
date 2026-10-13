@@ -1,8 +1,10 @@
-# Owner-reported Firestore rules review
+# Live Firestore rules review
 
-This is a source review of the rules supplied by the project owner for `workout-companion-d078f`; it is not a Console read or an emulator execution. Existing records/accounts are owner-confirmed test data. The owner reports no custom indexes; Firestore's automatic single-field indexing is a separate default.
+On 2026-10-12, authenticated read-only inspection verified the default Firestore database for `workout-companion-d078f`: Standard edition, Native mode, multi-region `nam5`. Rules API release `cloud.firestore` points to ruleset `fc68c82d-e750-4261-84f7-2ededa79c134`, created 2026-01-07. The deployed rules exactly match the previously owner-supplied policy. The live database has no composite indexes or field overrides; automatic single-field indexes are separate.
 
-[Rules transcript](security/OWNER_REPORTED_RULES.md) preserves the supplied policy statements. The pasted text includes Markdown formatting and omits the two outer closing braces. Reconcile a complete Console export before creating a deployable rules file.
+[Rules transcript](security/OWNER_REPORTED_RULES.md) remains as provenance for the earlier owner-supplied text. The complete live export closed the previously missing outer braces and confirmed that the reviewed policy is deployed.
+
+This branch adds a prototype `firestore.rules` replacement and emulator configuration. It also moves create/join/leave membership operations to authenticated callable Functions, removes route-triggered membership creation, and stops cross-user private profile/canonical-workout reads. The prototype is not deployed by this change.
 
 ## Release-critical findings
 
@@ -23,10 +25,10 @@ These are policy gaps identified from source, not evidence that anyone exploited
 
 ## Coordinated implementation order
 
-1. Establish deterministic emulator configuration and adversarial fixtures for outsider, member, owner and former-member access. Test both the observed policy and proposed replacements; do not call mocked callable tests a rules audit.
-2. Replace client create/join membership writes with authenticated, validated server operations. Preserve duplicate-join behavior/owner role and make membership plus user mirrors atomic. Invitation lookup must not require reading the private group collection.
-3. Restrict group/membership reads and writes, and remove route-triggered self-membership creation from Home/Chat/Progress/Goal screens together. Self-creation currently bypasses invitation security.
-4. Separate private profile/canonical workout reads from safe group presentation. Retain one canonical workout ID and explicit applicability across groups. Update MemberProfile/chat/progress queries alongside rules and introduce required indexes based on those queries.
-5. Enforce message ownership/field validation, goal membership, authoritative notification fan-out and account/group deletion behavior; cover retry, leave and stale membership edge cases.
+1. Establish deterministic emulator configuration and adversarial fixtures for outsider, member, owner and former-member access. Test proposed replacements; do not call mocked callable tests a rules audit. **Implemented in this branch; execution evidence is recorded in the PR.**
+2. Replace client create/join/leave membership writes with authenticated, validated server operations. Preserve duplicate-join behavior/owner role and make membership plus user mirrors atomic. Invitation lookup must not require reading the private group collection. **Implemented in this branch.**
+3. Restrict group/membership reads and writes, and remove route-triggered self-membership creation from Home/Chat/Progress/Goal screens together. Self-creation currently bypasses invitation security. **Implemented in this branch.**
+4. Separate private profile/canonical workout reads from safe group presentation. Retain one canonical workout ID and explicit applicability across groups. Update MemberProfile/chat/progress queries alongside rules and introduce required indexes based on those queries. **Partially implemented: cross-user private reads are removed, group views use message projections, and new workout cards must match a canonical workout. Edit/delete projection repair remains.**
+5. Enforce message ownership/field validation, goal membership, authoritative notification fan-out and account/group deletion behavior; cover retry, leave and stale membership edge cases. **Partially implemented: message/goal validators and membership-constrained notification writes are tested. Server-owned notification fan-out and deletion lifecycles remain.**
 
-Do not deploy an isolated member-only read policy while the existing JoinGroup client still queries `groups` by `inviteCode` and writes membership itself. This audit adds documentation only; no rules, live data or backend behavior are changed.
+Deployment must coordinate the callable Functions and rules: deploy the new callables first, validate them against test data, then deploy rules and a client build that uses the callables. Do not deploy the rules alone against the old client.

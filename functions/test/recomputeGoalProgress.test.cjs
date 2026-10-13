@@ -43,6 +43,7 @@ function loadCallable({ isMember = true, membershipError } = {}) {
   }
 
   const sdk = {
+    "node:crypto": { randomInt: () => 0 },
     "firebase-admin": {
       initializeApp() {},
       firestore: () => ({ collection: (name) => collection([name]) }),

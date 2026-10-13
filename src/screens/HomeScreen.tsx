@@ -11,8 +11,6 @@ import {
   onSnapshot,
   orderBy,
   query,
-  serverTimestamp,
-  setDoc,
   updateDoc,
   writeBatch,
 } from "firebase/firestore";
@@ -72,12 +70,19 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!user) return;
 
+    let childUnsubs: (() => void)[] = [];
+    const clearChildren = () => {
+      childUnsubs.forEach((unsubscribe) => unsubscribe());
+      childUnsubs = [];
+    };
+
     const unsub = onSnapshot(
       query(userGroupsCol(user.uid)),
       (snap) => {
+        clearChildren();
         const groupIds = snap.docs.map((d) => d.id);
-        const unsubs: Array<() => void> = [];
         const next: Record<string, GoalCard> = {};
+        setCards([]);
 
         for (const gid of groupIds) {
           const u1 = onSnapshot(groupDoc(gid), (gs) => {
@@ -91,49 +96,33 @@ export default function HomeScreen() {
             setCards(Object.values(next));
           });
 
-          const u2 = (() => {
-            let unsubGoal = () => {};
-            (async () => {
-              try {
-                await setDoc(
-                  doc(db, "groups", gid, "members", user.uid),
-                  { userId: user.uid, joinDate: serverTimestamp() },
-                  { merge: true }
-                );
-              } catch {
-                // non-fatal
-              }
+          const u2 = onSnapshot(
+            doc(db, "groups", gid, "goals", user.uid),
+            (goalSnap) => {
+              const gd = goalSnap.data() as any;
+              const primaryGoal =
+                Array.isArray(gd?.goalEntries) && gd.goalEntries.length > 0 ? gd.goalEntries[0] : gd;
+              next[gid] = {
+                ...(next[gid] ?? { groupId: gid, groupName: "Group" }),
+                groupId: gid,
+                targetWorkouts: primaryGoal?.targetWorkouts ?? undefined,
+                goalDateISO: primaryGoal?.goalDateISO ?? undefined,
+              };
+              setCards(Object.values(next));
+            },
+            (err) => Alert.alert("Goal error", err.message)
+          );
 
-              unsubGoal = onSnapshot(
-                doc(db, "groups", gid, "goals", user.uid),
-                (goalSnap) => {
-                  const gd = goalSnap.data() as any;
-                  const primaryGoal =
-                    Array.isArray(gd?.goalEntries) && gd.goalEntries.length > 0 ? gd.goalEntries[0] : gd;
-                  next[gid] = {
-                    ...(next[gid] ?? { groupId: gid, groupName: "Group" }),
-                    groupId: gid,
-                    targetWorkouts: primaryGoal?.targetWorkouts ?? undefined,
-                    goalDateISO: primaryGoal?.goalDateISO ?? undefined,
-                  };
-                  setCards(Object.values(next));
-                },
-                (err) => Alert.alert("Goal error", err.message)
-              );
-            })();
-
-            return () => unsubGoal();
-          })();
-
-          unsubs.push(u1, u2);
+          childUnsubs.push(u1, u2);
         }
-
-        return () => unsubs.forEach((f) => f());
       },
       (err) => Alert.alert("Home error", err.message)
     );
 
-    return unsub;
+    return () => {
+      unsub();
+      clearChildren();
+    };
   }, [user]);
 
   useEffect(() => {

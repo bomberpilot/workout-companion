@@ -2,39 +2,32 @@
 
 import {
   addDoc,
-  collection,
   doc,
   getDoc,
   getDocs,
   increment,
-  query,
   serverTimestamp,
   setDoc,
   updateDoc,
-  where,
-  deleteDoc,
   Timestamp,
   writeBatch,
 } from "firebase/firestore";
-import { db } from "../config/firebase";
-import type { GroupGoalType, GroupRole, GroupType } from "../types/models";
+import { getFunctions, httpsCallable } from "firebase/functions";
+import { app, db } from "../config/firebase";
+import type { GroupGoalType, GroupType } from "../types/models";
 import {
   groupMemberDoc,
   groupMembersCol,
   groupDoc,
-  groupsCol,
   messagesCol,
-  userGroupDoc,
   userGroupsCol,
   userNotificationsCol,
-  userSettingsDoc,
   userWorkoutsCol,
 } from "./paths";
 
 type CreateGroupInput = {
   name: string;
   type: GroupType;
-  createdBy: string;
   ownerNickname: string;
 };
 
@@ -54,40 +47,7 @@ function shouldCountDuration(groupData: any, workoutDate: Date) {
   return true;
 }
 
-function makeInviteCode(len = 6) {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let out = "";
-  for (let i = 0; i < len; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
-  return out;
-}
-
-async function sendExpoPushNotifications(params: {
-  tokens: string[];
-  title: string;
-  body: string;
-  data?: Record<string, string>;
-}) {
-  if (params.tokens.length === 0) return;
-  try {
-    await fetch("https://exp.host/--/api/v2/push/send", {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(
-        params.tokens.map((token) => ({
-          to: token,
-          title: params.title,
-          body: params.body,
-          data: params.data,
-        }))
-      ),
-    });
-  } catch {
-    // non-fatal
-  }
-}
+const functions = getFunctions(app);
 
 export async function ensureUserProfileDoc(params: { userId: string; email?: string }) {
   const ref = doc(db, "users", params.userId);
@@ -108,85 +68,27 @@ export async function ensureUserProfileDoc(params: { userId: string; email?: str
 }
 
 export async function createGroup(input: CreateGroupInput) {
-  const inviteCode = makeInviteCode();
-
-  const now = new Date();
-  const start = Timestamp.fromDate(now);
-  const end = Timestamp.fromDate(new Date(now.getTime() + 1000 * 60 * 60 * 24 * 30));
-
-  const gRef = await addDoc(groupsCol(), {
-    name: input.name,
-    type: input.type,
-    inviteCode,
-    createdBy: input.createdBy,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-
-    goalType: "frequency",
-    targetValue: 12,
-    startDate: start,
-    endDate: end,
-  });
-
-  await addMemberToGroup({
-    groupId: gRef.id,
-    userId: input.createdBy,
-    nickname: input.ownerNickname,
-    role: "owner",
-  });
-
-  return { groupId: gRef.id, inviteCode };
+  const call = httpsCallable<
+    { name: string; type: GroupType; nickname: string },
+    { groupId: string; inviteCode: string }
+  >(functions, "createGroup");
+  const result = await call({ name: input.name, type: input.type, nickname: input.ownerNickname });
+  return result.data;
 }
 
-export async function joinGroupByInviteCode(params: { userId: string; inviteCode: string; nickname: string }) {
-  const code = params.inviteCode.trim().toUpperCase();
-  const qy = query(collection(db, "groups"), where("inviteCode", "==", code));
-  const snap = await getDocs(qy);
-  if (snap.empty) throw new Error("No group matches that invite code.");
-
-  const groupId = snap.docs[0].id;
-
-  await addMemberToGroup({
-    groupId,
-    userId: params.userId,
-    nickname: params.nickname,
-    role: "member",
-  });
-
-  return { groupId };
+export async function joinGroupByInviteCode(params: { inviteCode: string; nickname: string }) {
+  const call = httpsCallable<
+    { inviteCode: string; nickname: string },
+    { groupId: string; alreadyMember: boolean }
+  >(functions, "joinGroup");
+  const result = await call({ inviteCode: params.inviteCode, nickname: params.nickname });
+  return result.data;
 }
 
-export async function addMemberToGroup(params: {
-  groupId: string;
-  userId: string;
-  nickname: string;
-  role: GroupRole;
-}) {
-  await setDoc(
-    groupMemberDoc(params.groupId, params.userId),
-    {
-      userId: params.userId,
-      nickname: params.nickname ?? "",
-      role: params.role,
-      joinDate: serverTimestamp(),
-    },
-    { merge: true }
-  );
-
-  await setDoc(
-    userGroupDoc(params.userId, params.groupId),
-    {
-      joinedAt: serverTimestamp(),
-      role: params.role,
-      nickname: params.nickname ?? "",
-    },
-    { merge: true }
-  );
-}
-
-export async function leaveGroup(params: { groupId: string; userId: string }) {
-  await deleteDoc(groupMemberDoc(params.groupId, params.userId));
-  await deleteDoc(userGroupDoc(params.userId, params.groupId));
+export async function leaveGroup(params: { groupId: string }) {
+  const call = httpsCallable<{ groupId: string }, { groupId: string; left: boolean }>(functions, "leaveGroup");
+  const result = await call({ groupId: params.groupId });
+  return result.data;
 }
 
 export async function updateGroupSettings(params: { groupId: string; patch: GroupSettingsPatch }) {

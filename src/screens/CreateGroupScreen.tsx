@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
-import { addDoc, collection, doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
@@ -11,8 +11,9 @@ import TextField from "../components/ui/TextField";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import SectionHeader from "../components/ui/SectionHeader";
-import { GROUP_TYPES, label, makeInviteCode } from "./groupUtils";
+import { GROUP_TYPES, label } from "./groupUtils";
 import { useTheme } from "../theme/ThemeProvider";
+import { createGroup as createGroupAction } from "../firestore/actions";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "CreateGroup">;
 
@@ -48,34 +49,12 @@ export default function CreateGroupScreen() {
 
     setBusy(true);
     try {
-      const code = makeInviteCode();
-      const g = await addDoc(collection(db, "groups"), {
+      const result = await createGroupAction({
         name,
         type: groupType,
-        inviteCode: code,
-        createdBy: user.uid,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        ownerNickname: nick,
       });
-
-      await setDoc(
-        doc(db, "groups", g.id, "members", user.uid),
-        {
-          userId: user.uid,
-          role: "owner",
-          nickname: nick,
-          joinDate: serverTimestamp(),
-        },
-        { merge: true }
-      );
-
-      await setDoc(
-        doc(db, "users", user.uid, "groups", g.id),
-        { joinedAt: serverTimestamp(), role: "owner", nickname: nick },
-        { merge: true }
-      );
-
-      nav.navigate("GoalSetup", { groupId: g.id });
+      nav.navigate("GoalSetup", { groupId: result.groupId });
     } catch (e: any) {
       Alert.alert("Create error", e?.message ?? "Something went wrong.");
     } finally {

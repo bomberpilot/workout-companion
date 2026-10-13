@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, FlatList, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, where } from "firebase/firestore";
 
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { useAuth } from "../auth/useAuth";
@@ -10,7 +10,7 @@ import { db } from "../config/firebase";
 import Button from "../components/ui/Button";
 import TextField from "../components/ui/TextField";
 import EditWorkoutModal from "../components/workout/EditWorkoutModal";
-import { groupMemberDoc, userWorkoutsCol } from "../firestore/paths";
+import { groupMemberDoc, messagesCol, userWorkoutsCol } from "../firestore/paths";
 import Card from "../components/ui/Card";
 import SectionHeader from "../components/ui/SectionHeader";
 import { useTheme } from "../theme/ThemeProvider";
@@ -71,7 +71,7 @@ export default function MemberProfileScreen() {
   const { params } = useRoute<R>();
   const nav = useNavigation<Nav>();
   const { user, initializing } = useAuth();
-  const { colors, radius, shadow, spacing, typography } = useTheme();
+  const { colors, shadow, spacing, typography } = useTheme();
   const [displayName, setDisplayName] = useState(params.userId.slice(0, 6));
   const [groupNickname, setGroupNickname] = useState<string | null>(null);
   const [nickname, setNickname] = useState("");
@@ -99,10 +99,12 @@ export default function MemberProfileScreen() {
 
   useEffect(() => {
     if (initializing || !user) return;
-    const unsubProfile = onSnapshot(doc(db, "users", params.userId), (snap) => {
-      const dn = (snap.data() as any)?.displayName;
-      if (typeof dn === "string" && dn.trim().length) setDisplayName(dn.trim());
-    });
+    const unsubProfile = isSelf
+      ? onSnapshot(doc(db, "users", params.userId), (snap) => {
+          const dn = (snap.data() as any)?.displayName;
+          if (typeof dn === "string" && dn.trim().length) setDisplayName(dn.trim());
+        })
+      : () => {};
 
     const unsubGoal = onSnapshot(doc(db, "groups", params.groupId, "goals", params.userId), (snap) => {
       if (!snap.exists()) {
@@ -148,7 +150,7 @@ export default function MemberProfileScreen() {
       unsubGoal();
       unsubMember();
     };
-  }, [initializing, params.groupId, params.userId, user]);
+  }, [initializing, isSelf, params.groupId, params.userId, user]);
 
   useEffect(() => {
     if (!isSelf || dirtyNickname) return;
@@ -159,19 +161,32 @@ export default function MemberProfileScreen() {
     if (initializing || !user) return;
     (async () => {
       try {
-        const wQuery = query(userWorkoutsCol(params.userId), orderBy("createdAt", "desc"), limit(40));
+        const wQuery = isSelf
+          ? query(userWorkoutsCol(params.userId), orderBy("createdAt", "desc"), limit(40))
+          : query(messagesCol(params.groupId), where("userId", "==", params.userId), limit(100));
         const wSnap = await getDocs(wQuery);
-        const rows = wSnap.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<WorkoutRow, "id">),
-        }));
+        const rows = wSnap.docs.flatMap((d) => {
+          const data = d.data() as any;
+          if (!isSelf && data?.type !== "workout") return [];
+          if (isSelf) {
+            return [{ id: d.id, ...(data as Omit<WorkoutRow, "id">) }];
+          }
+          return [{
+            id: typeof data.workoutId === "string" ? data.workoutId : d.id,
+            activityTypes: Array.isArray(data.activityTypes) ? data.activityTypes : [],
+            durationMinutes: Number(data.durationMinutes ?? 0) || 0,
+            date: data.workoutDate ?? data.createdAt,
+            createdAt: data.createdAt,
+            notes: typeof data.groupNote === "string" ? data.groupNote : "",
+          }];
+        });
 
         setWorkouts(sortWorkouts(rows));
       } catch (err: any) {
         Alert.alert("Workouts error", err?.message ?? "Unable to load workouts.");
       }
     })();
-  }, [initializing, params.userId, user]);
+  }, [initializing, isSelf, params.groupId, params.userId, user]);
 
   const goalTitle = groupNickname ?? displayName;
   const draggingGoal = useMemo(
@@ -196,6 +211,7 @@ export default function MemberProfileScreen() {
   }
 
   function openGoalMenu(goalId?: string) {
+    if (!isSelf) return;
     Alert.alert("Goal options", "Choose an action", [
       {
         text: "Edit goal",
@@ -206,6 +222,7 @@ export default function MemberProfileScreen() {
   }
 
   function openWorkoutMenu(item: WorkoutRow) {
+    if (!isSelf) return;
     Alert.alert("Workout options", "Choose an action", [
       { text: "Edit workout", onPress: () => openWorkoutEditor(item) },
       { text: "Cancel", style: "cancel" },
